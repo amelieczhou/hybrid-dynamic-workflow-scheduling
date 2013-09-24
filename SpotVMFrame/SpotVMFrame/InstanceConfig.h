@@ -1,16 +1,18 @@
 #include <vector>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graph_traits.hpp>
-
+#include <vector>
 using namespace boost;
 
 //const int depth = 5; //only odd nums
 //const int width = 10;//3;
 //const double deadline = 1800;
 const int types = 4;//types for spotvm and vm
-
+const int randomsize = 1000000;//the size of random number generated
 const double OnDemandLag = 5;//0.5;
 const double SpotLag = 10;//1;
+const bool NoSpotVM = true;
+double Times[4][types] = {{120,65,38,24},{90,50,30,20},{60,35,23,17},{30,20,15,13}};
 //const int ConfigSlot = 3;
 
 enum Integer_vm
@@ -19,6 +21,10 @@ enum Integer_vm
 	ready = 1,
 	scheduled = 2,
 	finished = 3
+};
+enum DAG_type
+{
+	montage = 0
 };
 
 class task //with special structure as in SIGMOD11
@@ -76,6 +82,7 @@ struct taskVertex
 	double cost; //the monetary cost spent on this task
 	double tasktime; //the execution time spent on this task
 	double taskstart;
+	int assigned_type; 
 		
 	int* configList;
 	int vmID;
@@ -85,6 +92,8 @@ struct taskVertex
 	double seq_data; //sequential I/O data in MBytes
 	double trans_data; //network data in MBytes
 	double rec_data; //network data in MBytes
+
+	double probestTime[types][randomsize];
 
 	void instance_config();
 };
@@ -123,7 +132,9 @@ class DAG
 public:
 	Graph g;
 	double deadline;
+	DAG_type type;
 
+	DAG();
 	DAG(double d){deadline = d;}
 	void reset();
 	DAG(Graph dag){g = dag;}

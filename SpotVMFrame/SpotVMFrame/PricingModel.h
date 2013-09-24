@@ -1,3 +1,5 @@
+const double priceOnDemand[] = {0.095, 0.19, 0.38, 0.76};
+
 class PricingModel{
 public:
 	int init();

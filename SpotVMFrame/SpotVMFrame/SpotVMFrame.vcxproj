@@ -79,6 +79,7 @@
     <None Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Algorithms.h" />
     <ClInclude Include="InstanceConfig.h" />
     <ClInclude Include="PricingModel.h" />
     <ClInclude Include="ReadTrace.h" />
@@ -90,10 +91,12 @@
     <ClCompile Include="InstanceConfig.cpp" />
     <ClCompile Include="PricingModel.cpp" />
     <ClCompile Include="ReadTrace.cpp" />
+    <ClCompile Include="SearchPrune.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="utility.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
