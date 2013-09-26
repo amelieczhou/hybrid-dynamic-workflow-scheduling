@@ -10,7 +10,7 @@
 #include <boost/graph/topological_sort.hpp>
 #include <boost/random.hpp>
 //using namespace std;
-extern bool NoSpotVM;
+//extern bool NoSpotVM;
 //#include <vector>
 
 bool function(double bid_price, double compare_price)
@@ -26,17 +26,6 @@ bool myfunction(taskVertex* a, taskVertex* b)
 	return (a->dl < b->dl);
 }
 
-task::task(double* t, int n)
-{
-	for(int i = 0; i<types; i++){
-		estimateTime[i] = ((int) t[i])*1.0;
-	}
-	name = n; 
-	start_time = end_time = dl = 0;
-	readyCountdown = -1;
-	status = not_ready;	config = 0;
-	
-}
 
 void DAG::reset(){
 	/*int size = tasks.size();

@@ -6,21 +6,22 @@
 #include "stdafx.h"
 #include <stdlib.h>
 #include <vector>
-#include <utility>
-#include <cmath>
-#include <algorithm>
 #include <iostream>
-#include <fstream>
 #include <time.h>
 #include "ReadTrace.h"
 #include "PricingModel.h"
 #include "InstanceConfig.h"
-#include "Algorithms.h"
 #include <boost/graph/topological_sort.hpp>
-#include <boost/math/distributions/gamma.hpp>
-#include <boost/math/distributions/normal.hpp>
+
 
 using namespace boost;
+//I/O performance distribution, seek/sec
+double OnDemandLag = 10;//0.5;
+double SpotLag = 5;//1;
+bool NoSpotVM = true;
+double Times[4][types] = {{120,65,38,24},{90,50,30,20},{60,35,23,17},{30,20,15,13}};
+double lambda;
+int num_jobs;
 
 int main(int argc, char** argv)
 {	
@@ -37,6 +38,8 @@ int main(int argc, char** argv)
 	double rand_io_ratio = atof(argv[10]);
 	double exe_time = atof(argv[11]); //The parallel parameter used to modify Times[][]
 	double meet_dl = atof(argv[13]); //the deadline meet rate submitted by the user
+	lambda = atof(argv[14]);
+	num_jobs = atoi(argv[15]);
 
 	for(int i=0; i<4; i++)
 		for(int j=1; j<types; j++)
@@ -49,27 +52,27 @@ int main(int argc, char** argv)
 	double r = (double) rand()/(RAND_MAX+1);
 	if(strcmp (argv[12], "sens") == 0) ////for senstivity test, fix the DAG type and task types
 		r = 0.5;
-	ioseq[0] = math::quantile(seq_io_s, r);
-	iorand[0] = math::quantile(r_norm_s, r);
-	net_up[0] = math::quantile(gamma_s_up, r);
+	//ioseq[0] = math::quantile(seq_io_s, r);
+	//iorand[0] = math::quantile(r_norm_s, r);
+	//net_up[0] = math::quantile(gamma_s_up, r);
 
 	//input workflows
 	//Graph dag;
-	DAG dag(deadline);
+	DAG dag(deadline,meet_dl);
 	
 	if(strcmp(argv[1],"montage") == 0)
 	{
 		dag.type = montage;
 		//generate a montage DAG
-		double tProjectPP[types] = {};
-		double tDiffFit[types] = {};
-		double tConcatFit[types] = {};
-		double tBgModel[types] = {};
-		double tBackground[types] = {};
-		double tImgTbl[types] = {};
-		double tAdd[types] = {};
-		double tShrink[types] = {};
-		double tJPEG[types] = {};
+		double tProjectPP[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
+		double tDiffFit[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
+		double tConcatFit[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
+		double tBgModel[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
+		double tBackground[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
+		double tImgTbl[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
+		double tAdd[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
+		double tShrink[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
+		double tJPEG[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
 
 		for(int i=0; i<20; i++){
 			taskVertex tk;
@@ -83,89 +86,94 @@ int main(int argc, char** argv)
 			//	for(int j=0; j<types; j++)
 			//		tk.estTime[j] = 0;
 			//}else 
-			if(i>=0 && i<=4)	{
+			if(i>=0 && i<4)	{
 				for(int j=0; j<types; j++)
 					tk.estTime[j] = tProjectPP[j];
-				tk.read_data = ; //random io in seeks
-				tk.trans_data = ; //network transfer in MB
-				tk.seq_data = ; //sequential io in seeks
-			}else if(i>=5 && i<=10){
+				tk.read_data = 1; //random io in seeks
+				tk.trans_data = 1; //network transfer in MB
+				tk.seq_data = 1; //sequential io in seeks
+			}else if(i>=4 && i<10){
 				for(int j=0; j<types; j++)
 					tk.estTime[j] = tDiffFit[j];
-				tk.read_data = ; //random io in seeks
-				tk.trans_data = ; //network transfer in MB
-				tk.seq_data = ; //sequential io in seeks
-			}else if(i == 11) {
+				tk.read_data = 1; //random io in seeks
+				tk.trans_data = 1; //network transfer in MB
+				tk.seq_data = 1; //sequential io in seeks
+			}else if(i == 10) {
 				for(int j=0; j<types; j++)
 					tk.estTime[j] = tConcatFit[j];
-				tk.read_data = ; //random io in seeks
-				tk.trans_data = ; //network transfer in MB
-				tk.seq_data = ; //sequential io in seeks
-			}else if(i == 12) {
+				tk.read_data = 1; //random io in seeks
+				tk.trans_data = 1; //network transfer in MB
+				tk.seq_data = 1; //sequential io in seeks
+			}else if(i == 11) {
 				for(int j=0; j<types; j++)
 					tk.estTime[j] = tBgModel[j];
-				tk.read_data = ; //random io in seeks
-				tk.trans_data = ; //network transfer in MB
-				tk.seq_data = ; //sequential io in seeks
-			}else if(i>=13 && i<=16){
+				tk.read_data = 1; //random io in seeks
+				tk.trans_data = 1; //network transfer in MB
+				tk.seq_data = 1; //sequential io in seeks
+			}else if(i>=12 && i<16){
 				for(int j=0; j<types; j++)
 					tk.estTime[j] = tBackground[j];
-				tk.read_data = ; //random io in seeks
-				tk.trans_data = ; //network transfer in MB
-				tk.seq_data = ; //sequential io in seeks
-			}else if(i == 17){
+				tk.read_data = 1; //random io in seeks
+				tk.trans_data = 1; //network transfer in MB
+				tk.seq_data = 1; //sequential io in seeks
+			}else if(i == 16){
 				for(int j=0; j<types; j++)
 					tk.estTime[j] = tImgTbl[j];
-				tk.read_data = ; //random io in seeks
-				tk.trans_data = ; //network transfer in MB
-				tk.seq_data = ; //sequential io in seeks
-			}else if(i == 18){
+				tk.read_data = 1; //random io in seeks
+				tk.trans_data = 1; //network transfer in MB
+				tk.seq_data = 1; //sequential io in seeks
+			}else if(i == 17){
 				for(int j=0; j<types; j++)
 					tk.estTime[j] = tAdd[j];
-				tk.read_data = ; //random io in seeks
-				tk.trans_data = ; //network transfer in MB
-				tk.seq_data = ; //sequential io in seeks
-			}else if(i == 19){
+				tk.read_data = 1; //random io in seeks
+				tk.trans_data = 1; //network transfer in MB
+				tk.seq_data = 1; //sequential io in seeks
+			}else if(i == 18){
 				for(int j=0; j<types; j++)
 					tk.estTime[j] = tShrink[j];
-				tk.read_data = ; //random io in seeks
-				tk.trans_data = ; //network transfer in MB
-				tk.seq_data = ; //sequential io in seeks
-			}else if(i == 20) {
+				tk.read_data = 1; //random io in seeks
+				tk.trans_data = 1; //network transfer in MB
+				tk.seq_data = 1; //sequential io in seeks
+			}else if(i == 19) {
 				for(int j=0; j<types; j++)
 					tk.estTime[j] = tJPEG[j];
-				tk.read_data = ; //random io in seeks
-				tk.trans_data = ; //network transfer in MB
-				tk.seq_data = ; //sequential io in seeks
+				tk.read_data = 1; //random io in seeks
+				tk.trans_data = 1; //network transfer in MB
+				tk.seq_data = 1; //sequential io in seeks
 			}
+			//for debuging, dont forget to comment it!!!!!!!!!!
+			tk.read_data = tk.trans_data = tk.seq_data = 0;
 			add_vertex(tk, dag.g);
 		}
 		//add edges to the graph
 		//add edges to the graph
-		int l1[4] = {1,2,3,4};
-		int l2[6] = {5,6,7,8,9,10};
-		int l3[4] = {13,14,15,16};
-		for(int i=0; i<4; i++) //for the dummy entry node
-			add_edge(0,l1[i],dag.g);
-		add_edge(20,21,dag.g); //for the exit dummy node
-		for(int i=0; i<4; i++) {
-			add_edge(l1[i],l3[i],dag.g);
-			add_edge(l1[i],l2[i],dag.g);
-			add_edge(l1[i],l2[i]+1,dag.g);
+		int l1[4] = {0,1,2,3};
+		int l2[6] = {4,5,6,7,8,9};
+		int l3[4] = {12,13,14,15};
+		add_edge(0,4,dag.g);
+		add_edge(1,4,dag.g);
+		add_edge(0,5,dag.g);
+		add_edge(1,5,dag.g);
+		add_edge(1,6,dag.g);
+		add_edge(2,6,dag.g);
+		add_edge(2,7,dag.g);
+		add_edge(3,7,dag.g);
+		add_edge(1,8,dag.g);
+		add_edge(3,8,dag.g);
+		add_edge(3,9,dag.g);
+
+		for(int i=0; i<6; i++){
+			add_edge(l2[i],10,dag.g);
 		}
-		add_edge(4,10,dag.g);
-		add_edge(2,5,dag.g);
-		add_edge(2,9,dag.g);
-		for(int i=0; i<6; i++)
-			add_edge(l2[i],11,dag.g);
-		add_edge(11,12,dag.g);
-		for(int i=0; i<4; i++) {
-			add_edge(12,l3[i],dag.g);
-			add_edge(l3[i],17,dag.g);
+		add_edge(10,11,dag.g);
+		for(int i=0; i<4;i++){
+			add_edge(i,l3[i],dag.g);
+			add_edge(11,l3[i],dag.g);
+			add_edge(l3[i],16,dag.g);
 		}
+		add_edge(16,17,dag.g);
 		add_edge(17,18,dag.g);
 		add_edge(18,19,dag.g);
-		add_edge(19,20,dag.g);		
 	}
 
 	//suitable for all kinds of DAG
@@ -185,8 +193,10 @@ int main(int argc, char** argv)
 	}
 
 	//offline optimization
-	SearchPrune* optimizer = new SearchPrune(dag);
-	optimizer->OfflineSP();
-
+	SearchPrune* optimizer = new SearchPrune();
+	optimizer->dag = dag;
+	optimizer->OfflineSP_DFS();
+	optimizer->SpotTune();
+	optimizer->OnlineSimulate();
 	return 0;
 }

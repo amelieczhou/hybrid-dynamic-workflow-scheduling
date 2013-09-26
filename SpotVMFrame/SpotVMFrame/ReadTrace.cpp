@@ -63,7 +63,7 @@ int ReadTrace::readprice(float* result){
 	    // store the float value
 	    memset(buf, 0, 32);
 	    strncpy(buf, ptr, ptr2-ptr);
-	    if(j == 3)
+	    if(j == 3)//trace for small instance type
 			result[0] = atof(buf); 
 		else if(j == 38)
 			result[1] = atof(buf); 

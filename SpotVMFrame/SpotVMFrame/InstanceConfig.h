@@ -2,18 +2,27 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graph_traits.hpp>
 #include <vector>
+#include <boost/random/gamma_distribution.hpp>
+#include <boost/random/normal_distribution.hpp>
+#include <boost/graph/astar_search.hpp>
 using namespace boost;
 
+#ifndef INSTANCECONFIG_H_
+#define INSTANCECONFIG_H_
 //const int depth = 5; //only odd nums
 //const int width = 10;//3;
 //const double deadline = 1800;
 const int types = 4;//types for spotvm and vm
-const int randomsize = 1000000;//the size of random number generated
-const double OnDemandLag = 5;//0.5;
-const double SpotLag = 10;//1;
-const bool NoSpotVM = true;
-double Times[4][types] = {{120,65,38,24},{90,50,30,20},{60,35,23,17},{30,20,15,13}};
+const int randomsize = 10;//the size of random number generated
+extern double OnDemandLag;//0.5;
+extern double SpotLag;//1;
+extern bool NoSpotVM;
+extern double Times[4][types];
+extern double lambda;
+extern int num_jobs;
+extern int num_monte;
 //const int ConfigSlot = 3;
+#endif
 
 enum Integer_vm
 {
@@ -27,43 +36,6 @@ enum DAG_type
 	montage = 0
 };
 
-class task //with special structure as in SIGMOD11
-{
-	int name;
-	//double time;
-	bool mark; //assigned deadline = 1
-
-	std::vector<task*> child_TaskList;
-	std::vector<task*> parent_TaskList;
-public:
-	double start_time;
-	double end_time;
-	double dl;
-
-	double readyCountdown;
-	double estimateTime[types];//depend on Machine Type, including VMs and SpotVMs
-	double restTime;//time to complete
-	int config;
-	int* configList; //2 SpotVMs + 1 on-demand VM
-	double* prices; //3D
-	Integer_vm status;
-
-	task(double* t, int n);
-	void addconfig(){this->config = this->config + 1;}
-	void reset(){readyCountdown = -1; status = not_ready;	config = 0; dl = end_time-start_time;}
-	//void set_time(double t) {time = t;}
-	//double get_time(){return time;}
-	void instance_config();
-	void set_mark(bool b) {mark = b;}
-	bool get_mark() {return mark;}
-	void set_child(std::vector<task*> child){child_TaskList = child;}
-	int show_name(){return name;}
-	void set_name(int n) {name = n;}
-	std::vector<task*> get_child(){return child_TaskList;}
-	void set_parent(std::vector<task*> parent){parent_TaskList = parent;}
-	std::vector<task*> get_parent(){return parent_TaskList;}
-	~task()	{child_TaskList.clear(); parent_TaskList.clear();}
-};
 
 struct taskVertex
 {
@@ -94,6 +66,8 @@ struct taskVertex
 	double rec_data; //network data in MBytes
 
 	double probestTime[types][randomsize];
+	double cumulativeTime[types][randomsize];
+	bool tag;
 
 	void instance_config();
 };
@@ -118,7 +92,7 @@ public:
 	SpotVM(double p) { price = p; canAlloc = true;}
 };
 
-typedef adjacency_list<vecS, vecS, bidirectionalS, taskVertex, property<edge_weight_t, double> > Graph;
+typedef adjacency_list<boost::vecS, boost::vecS, bidirectionalS, taskVertex, property<edge_weight_t, double> > Graph;
 typedef graph_traits<Graph>::vertex_descriptor Vertex;
 typedef graph_traits<Graph>::vertex_iterator vertex_iter;
 typedef graph_traits<Graph>::out_edge_iterator out_edge_iterator;
@@ -132,19 +106,58 @@ class DAG
 public:
 	Graph g;
 	double deadline;
+	double meet_dl;
 	DAG_type type;
+	double arrival_time;
 
-	DAG();
-	DAG(double d){deadline = d;}
+	DAG() {};
+	DAG(double d,double d1){deadline = d; meet_dl = d1;}
 	void reset();
 	DAG(Graph dag){g = dag;}
+	DAG(const DAG& dag) {g=dag.g;deadline=dag.deadline;meet_dl=dag.meet_dl;type=dag.type;}
 	std::vector<int> find_CP();
 	void initDLAssign();
 	void deadline_assign();
 };
+class Dyna{
+	
+};
+struct configstack{
+	//this struct is used to store the searched configuration list in the stack, and maintain their parent and child info
+	std::vector<int> configurations;
+	//configstack* parent; //parent on the search path
+	//configstack* child; //child on the search path
+	int taskno; //the task modified to form this configuration 
+	//int nextsearchedtype; //the type searched for the next task
+	bool* childcolor; //mark which child has been searched
+};
+//typedef adjacency_list<vecS, vecS, bidirectionalS, DAG, property<edge_weight_t, double> > DAGGraph;//each task is a dag
 
+//template <class DAGGraph, class CostType> 
+//class distance_heuristic : public astar_search<DAGGraph, CostType>{
+//public:
+//	 typedef typename graph_traits<Graph>::vertex_descriptor Vertex;
+//
+//};
+class SearchPrune{
+public:
+	DAG dag;
+	std::vector<DAG> dags;//for online simulation
+
+	//use the aStar to search
+	//use the expected cost to prune
+	void OfflineSP_BFS();//go through all the types of one task first, go through different tasks later
+	void OfflineSP_DFS();//go through each task first, go through different instance types later
+	void SpotTune();
+	void OnlineSimulate();
+
+//	SearchPrune();
+//	SearchPrune(DAG input){dag = input;}
+};
 
 bool function(double bid_price, double compare_price);
 double rn_01();
 int rn_integers(int a, int b);
 bool myfunction(taskVertex* a, taskVertex* b);
+double estimateCost(DAG dag, int start, bool estimate); //estimate or calculate the total cost of dag, starting from the start task
+void estimateTime(DAG dag, double* estTime); //estimate the total execution time of dag
