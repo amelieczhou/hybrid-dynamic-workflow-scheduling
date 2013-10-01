@@ -16,8 +16,8 @@
 
 using namespace boost;
 //I/O performance distribution, seek/sec
-double OnDemandLag = 10;//0.5;
-double SpotLag = 5;//1;
+double OnDemandLag = 90;//seconds//10;//0.5;
+double SpotLag = 60;//seconds//1;
 bool NoSpotVM = true;
 double Times[4][types] = {{120,65,38,24},{90,50,30,20},{60,35,23,17},{30,20,15,13}};
 double lambda;
@@ -64,21 +64,23 @@ int main(int argc, char** argv)
 	{
 		dag.type = montage;
 		//generate a montage DAG
-		double tProjectPP[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
-		double tDiffFit[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
-		double tConcatFit[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
-		double tBgModel[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
-		double tBackground[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
-		double tImgTbl[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
-		double tAdd[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
-		double tShrink[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
-		double tJPEG[types] = {100,100,100,1};//{1,1,1,1};//{8,4,2,1};
+		//unit time is second
+		double tProjectPP[types] = {540,264,150,90};//{100,100,100,1};//{8,4,2,1};
+		double tDiffFit[types] = {1200,600,339,200};//{100,100,100,1};//{8,4,2,1};
+		double tConcatFit[types] = {2268,1122,636,372};//{100,100,100,1};//{8,4,2,1};
+		double tBgModel[types] = {17244,8200,4633,2725};//{100,100,100,1};//{8,4,2,1};
+		double tBackground[types] = {40,20,11,7};//{100,100,100,1};//{8,4,2,1};
+		double tImgTbl[types] = {56,30,17,10};//{100,100,100,1};//{8,4,2,1};
+		double tAdd[types] = {1080,179,101,59};//{100,100,100,1};//{8,4,2,1};
+		double tShrink[types] = {324,150,85,50};//{100,100,100,1};//{8,4,2,1};
+		double tJPEG[types] = {186,112,63,37};//{100,100,100,1};//{8,4,2,1};
 
 		for(int i=0; i<20; i++){
 			taskVertex tk;
 			tk.name = i;
 			tk.estTime = new double [types];
-			tk.config = tk.mark = tk.assigned_type = 0; tk.rec_data = 0; 
+			tk.cpuTime = new double [types];
+			tk.config = tk.mark = tk.assigned_type = tk.restTime = 0; tk.rec_data = 0; 
 			tk.readyCountdown = -1; tk.status = not_ready;
             tk.actTime = new double [types];
 			//if(i == 0 || i == 21) //two dummy tasks
@@ -86,63 +88,74 @@ int main(int argc, char** argv)
 			//	for(int j=0; j<types; j++)
 			//		tk.estTime[j] = 0;
 			//}else 
+			for(int i=0; i<types; i++)
+				tk.estTime[i] = tk.actTime[i] = 0;
 			if(i>=0 && i<4)	{
 				for(int j=0; j<types; j++)
-					tk.estTime[j] = tProjectPP[j];
-				tk.read_data = 1; //random io in seeks
-				tk.trans_data = 1; //network transfer in MB
-				tk.seq_data = 1; //sequential io in seeks
+					tk.cpuTime[j] = tProjectPP[j];
+				tk.read_data = 0; //random io in seeks
+				tk.trans_data = 2070; //network transfer in MB
+				tk.seq_data = 1050; //sequential io in MB
+				tk.rec_data = 0; //network download data in MB
 			}else if(i>=4 && i<10){
 				for(int j=0; j<types; j++)
-					tk.estTime[j] = tDiffFit[j];
-				tk.read_data = 1; //random io in seeks
-				tk.trans_data = 1; //network transfer in MB
-				tk.seq_data = 1; //sequential io in seeks
+					tk.cpuTime[j] = tDiffFit[j];
+				tk.read_data = 0; //random io in seeks
+				tk.trans_data = 86.6; //network transfer in MB
+				tk.seq_data = 2100; //sequential io in MB
+				tk.rec_data = 2100; //network download data in MB
 			}else if(i == 10) {
 				for(int j=0; j<types; j++)
-					tk.estTime[j] = tConcatFit[j];
-				tk.read_data = 1; //random io in seeks
+					tk.cpuTime[j] = tConcatFit[j];
+				tk.read_data = 0; //random io in seeks
 				tk.trans_data = 1; //network transfer in MB
-				tk.seq_data = 1; //sequential io in seeks
+				tk.seq_data = 519.6; //sequential io in MB
+				tk.rec_data = 519.6; //network download data in MB
 			}else if(i == 11) {
 				for(int j=0; j<types; j++)
-					tk.estTime[j] = tBgModel[j];
-				tk.read_data = 1; //random io in seeks
-				tk.trans_data = 1; //network transfer in MB
-				tk.seq_data = 1; //sequential io in seeks
+					tk.cpuTime[j] = tBgModel[j];
+				tk.read_data = 0; //random io in seeks
+				tk.trans_data = 0.1; //network transfer in MB
+				tk.seq_data = 1; //sequential io in MB
+				tk.rec_data = 1; //network download data in MB
 			}else if(i>=12 && i<16){
 				for(int j=0; j<types; j++)
-					tk.estTime[j] = tBackground[j];
-				tk.read_data = 1; //random io in seeks
-				tk.trans_data = 1; //network transfer in MB
-				tk.seq_data = 1; //sequential io in seeks
+					tk.cpuTime[j] = tBackground[j];
+				tk.read_data = 0; //random io in seeks
+				tk.trans_data = 2070; //network transfer in MB
+				tk.seq_data = 2070; //sequential io in MB
+				tk.rec_data = 2070; //network download data in MB
 			}else if(i == 16){
 				for(int j=0; j<types; j++)
-					tk.estTime[j] = tImgTbl[j];
-				tk.read_data = 1; //random io in seeks
-				tk.trans_data = 1; //network transfer in MB
-				tk.seq_data = 1; //sequential io in seeks
+					tk.cpuTime[j] = tImgTbl[j];
+				tk.read_data = 0; //random io in seeks
+				tk.trans_data = 0; //network transfer in MB
+				tk.seq_data = 8280; //sequential io in MB
+				tk.rec_data = 8280; //network download data in MB
 			}else if(i == 17){
 				for(int j=0; j<types; j++)
-					tk.estTime[j] = tAdd[j];
-				tk.read_data = 1; //random io in seeks
-				tk.trans_data = 1; //network transfer in MB
-				tk.seq_data = 1; //sequential io in seeks
+					tk.cpuTime[j] = tAdd[j];
+				tk.read_data = 0; //random io in seeks
+				tk.trans_data = 4950; //network transfer in MB
+				tk.seq_data = 8280; //sequential io in MB
+				tk.rec_data = 8280; //network download data in MB
 			}else if(i == 18){
 				for(int j=0; j<types; j++)
-					tk.estTime[j] = tShrink[j];
-				tk.read_data = 1; //random io in seeks
-				tk.trans_data = 1; //network transfer in MB
-				tk.seq_data = 1; //sequential io in seeks
+					tk.cpuTime[j] = tShrink[j];
+				tk.read_data = 0; //random io in seeks
+				tk.trans_data = 154.4; //network transfer in MB
+				tk.seq_data = 2470; //sequential io in MB
+				tk.rec_data = 2470; //network download data in MB
 			}else if(i == 19) {
 				for(int j=0; j<types; j++)
-					tk.estTime[j] = tJPEG[j];
-				tk.read_data = 1; //random io in seeks
-				tk.trans_data = 1; //network transfer in MB
-				tk.seq_data = 1; //sequential io in seeks
+					tk.cpuTime[j] = tJPEG[j];
+				tk.read_data = 0; //random io in seeks
+				tk.trans_data = 6.8; //network transfer in MB
+				tk.seq_data = 154.4; //sequential io in MB
+				tk.rec_data = 154.4; //network download data in MB
 			}
 			//for debuging, dont forget to comment it!!!!!!!!!!
-			tk.read_data = tk.trans_data = tk.seq_data = 0;
+			//tk.read_data = tk.trans_data = tk.seq_data = 0;
 			add_vertex(tk, dag.g);
 		}
 		//add edges to the graph
@@ -177,19 +190,19 @@ int main(int argc, char** argv)
 	}
 
 	//suitable for all kinds of DAG
-	std::pair<vertex_iter, vertex_iter> vp; 
-	vp = vertices(dag.g);
-	for(; vp.first != vp.second ; ++vp.first )
-	{
-		in_edge_iterator in_i, in_end;
-		edge_descriptor e;
-		for (boost::tie(in_i, in_end) = in_edges(*vp.first , dag.g); in_i != in_end; ++in_i) 
-		{
-			e = *in_i;
-			Vertex src = source(e, dag.g);
-			dag.g[*vp.first ].rec_data += dag.g[src].trans_data;			
+	if(dag.type != montage) {
+		std::pair<vertex_iter, vertex_iter> vp; 
+		vp = vertices(dag.g);
+		for(; vp.first != vp.second ; ++vp.first ) {
+			in_edge_iterator in_i, in_end;
+			edge_descriptor e;
+			for (boost::tie(in_i, in_end) = in_edges(*vp.first , dag.g); in_i != in_end; ++in_i) {
+				e = *in_i;
+				Vertex src = source(e, dag.g);
+				dag.g[*vp.first ].rec_data += dag.g[src].trans_data;			
+			}
+			printf("receive data for node %d: %f\n", *vp.first, dag.g[*vp.first].rec_data);
 		}
-		printf("receive data for node %d: %f\n", *vp.first, dag.g[*vp.first].rec_data);
 	}
 
 	//offline optimization

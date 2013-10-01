@@ -47,6 +47,7 @@ struct taskVertex
     double dl;
     double readyCountdown;
     double* estTime; //expected time, used for deadline assign and configuration
+	double* cpuTime;
 	double* actTime; //actual time, vary with cloud dynamics
     double restTime;
     Integer_vm status;
@@ -65,6 +66,10 @@ struct taskVertex
 	double trans_data; //network data in MBytes
 	double rec_data; //network data in MBytes
 
+	double randomIO[types][randomsize];
+	double seqIO[types][randomsize];
+	double netUp[types][randomsize];
+	double netDown[types][randomsize];
 	double probestTime[types][randomsize];
 	double cumulativeTime[types][randomsize];
 	bool tag;
@@ -78,6 +83,8 @@ public:
 	int type;
 	int life_time;
 	double turn_on; //turn on time
+
+	int has_data;//has data of task has_data on local disk
 };
 
 class SpotVM{
@@ -88,6 +95,8 @@ public:
 	double price;
 	double life_time;//life_time<1.0
 	double turn_on; //turn on time
+
+	int has_data;//has data of task has_data on local disk
 
 	SpotVM(double p) { price = p; canAlloc = true;}
 };
@@ -160,4 +169,6 @@ double rn_01();
 int rn_integers(int a, int b);
 bool myfunction(taskVertex* a, taskVertex* b);
 double estimateCost(DAG dag, int start, bool estimate); //estimate or calculate the total cost of dag, starting from the start task
-void estimateTime(DAG dag, double* estTime); //estimate the total execution time of dag
+void estimateTime(DAG dag, double* estTime); //estimate the total execution time of dag, used in offline search
+double estimateTime2(DAG dag); //estimate the execution time with estTime
+void estimateTimeSpot(DAG dag, double* estTime);//used in spot tune

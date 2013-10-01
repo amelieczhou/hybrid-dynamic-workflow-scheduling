@@ -27,6 +27,7 @@ extern boost::gamma_distribution<> seq_io_s(127.14,0.802);
 extern boost::gamma_distribution<> seq_io_l(376.57,0.281);
 extern boost::gamma_distribution<> seq_io_x(408.11,0.264);
 //network upload and download performance distribution
+//ms per 8MB data transfer
 extern boost::gamma_distribution<> gamma_s_up(2.077,604.38);
 extern boost::gamma_distribution<> gamma_m_up(0.812, 895.37);
 extern boost::gamma_distribution<> gamma_x_up(1.12, 528.68);//switched large and xlarge, to be reasonable
@@ -42,7 +43,7 @@ extern boost::gamma_distribution<> gamma_x_down(0.179, 127.87);
 //the dag is associated with a distribution of total execution time
 //dfs search all the tasks first, then increase the instance type
 void SearchPrune::OfflineSP_DFS(){ 
-	DAG dag(this->dag);
+	//DAG dag(this->dag);
 	
 	//for the performance of each instance type
 	double random_sequential_io[types][randomsize];
@@ -110,16 +111,20 @@ void SearchPrune::OfflineSP_DFS(){
 	vp = vertices(dag.g);
 	int quantile = dag.meet_dl * randomsize;
 	for(; vp.first != vp.second; vp.first++){
+		//dag.g[*vp.first].probestTime = new double[types][randomsize];
 		for(int t=0; t<types; t++){
 			for(int j=0; j<randomsize; j++){
-				dag.g[*vp.first].probestTime[t][j] = dag.g[*vp.first].estTime[t] + dag.g[*vp.first].trans_data * random_network_up[t][j] / 8
-					+ dag.g[*vp.first].rec_data * random_network_down[t][j] + dag.g[*vp.first].read_data / random_random_io[t][j] 
-				+ dag.g[*vp.first].seq_data / random_sequential_io[t][j];
+				dag.g[*vp.first].netUp[t][j] = dag.g[*vp.first].trans_data * random_network_up[t][j] / 8000;
+				dag.g[*vp.first].netDown[t][j] = dag.g[*vp.first].rec_data * random_network_down[t][j] / 8000;
+				dag.g[*vp.first].randomIO[t][j] = dag.g[*vp.first].read_data / random_random_io[t][j];
+				dag.g[*vp.first].seqIO[t][j] = dag.g[*vp.first].seq_data / random_sequential_io[t][j];
+				dag.g[*vp.first].probestTime[t][j] = dag.g[*vp.first].cpuTime[t] + dag.g[*vp.first].netUp[t][j]
+					+ dag.g[*vp.first].netDown[t][j] + dag.g[*vp.first].randomIO[t][j] + dag.g[*vp.first].seqIO[t][j];
 			}
 			//calculate the estimate time as the expected value of the proestTime
 			std::sort(std::begin(dag.g[*vp.first].probestTime[t]),std::end(dag.g[*vp.first].probestTime[t]));
 			dag.g[*vp.first].estTime[t] = dag.g[*vp.first].probestTime[t][quantile];
-			printf("type:%d,time:%f\n",t,dag.g[*vp.first].estTime[t]);
+			printf("task: %d, type: %d, time: %f\n",*vp.first,t,dag.g[*vp.first].estTime[t]);
 		}
 	}	
 	
@@ -160,6 +165,7 @@ void SearchPrune::OfflineSP_DFS(){
 		if(ratio >= dag.meet_dl){
 			globalBestCost = estimateCost(dag,0,false);
 			continuesearch = false; //out of the while loop
+			printf("initial ratio in search prune: %f\n",ratio);
 		}else{
 			int nexttask = DAGstack.top().taskno + 1;
 			if(nexttask < numoftasks){
@@ -183,41 +189,8 @@ void SearchPrune::OfflineSP_DFS(){
 					}
 				}
 				for(int i=0; i<numoftasks; i++)
-					dag.g[i].assigned_type = DAGstack.top().configurations[i];
-				
-				//if(state.configurations[nexttask] < types-1){
-				//	state.configurations[nexttask] += 1;
-				//	for(int i=0; i<numoftasks; i++)
-				//		dag.g[i].assigned_type = state.configurations[i];
-				//	DAGstack.push(state);
-				//}
-				//else{ //go backtrace to find one whose type can be increased
-				//	while(DAGstack.top().configurations[DAGstack.top().taskno] >= types-1)
-				//		DAGstack.pop();
-
-				//	DAGstack.top().configurations[DAGstack.top().taskno] += 1;
-				//	for(int i=0; i<numoftasks; i++)
-				//		dag.g[i].assigned_type = state.configurations[i];					
-				//	DAGstack.push()
-				//}
-			}else{ //nexttask >= numoftasks
-				/*int lastsearchedtype = DAGstack.top().configurations[DAGstack.top().taskno];
-				DAGstack.pop();
-				if(lastsearchedtype + 1 < types){
-					configstack state;
-					state.configurations = DAGstack.top().configurations;
-					state.taskno = DAGstack.top().taskno + 1;
-					state.configurations[state.taskno] = lastsearchedtype + 1;
-					for(int i=0; i<numoftasks; i++)
-						dag.g[i].assigned_type = DAGstack.top().configurations[i];	
-					DAGstack.push(state);
-				}else{
-					DAGstack.pop(); 
-					configstack state;
-					state.configurations = DAGstack.top().configurations;
-					state.taskno = DAGstack.top().taskno + 1;
-					state.configurations[state.taskno];
-				} */
+					dag.g[i].assigned_type = DAGstack.top().configurations[i];	
+			}else{ //nexttask >= numoftasks				
 				DAGstack.pop();
 				//?????
 			}
@@ -267,11 +240,25 @@ void SearchPrune::OfflineSP_DFS(){
 							globalBestCost = currentcost;
 							//preserve the current configuration
 							configsolutions.push_back(DAGstack.top());
+							printf("found ratio in search prune: %f\n",ratio);
 							//configsolution = DAGstack.top();
 						}
 					}else{ //no need to continue search since the rest must be more expensive
+						//based on the assumption that adopting better instances must be more expensive
+						DAGstack.pop();
+						//jump to the next next task?????????????????????????????????????
+						/*int nexttask = DAGstack.top().taskno+2;
+						if(nexttask < numoftasks){
+							configstack state;
+							state.configurations = DAGstack.top().configurations;
+							state.taskno = nexttask;
+							for(int t=0; t<types; t++){
 
-						//break;
+							}
+						}*/
+						for(int i=t; i<types; i++)
+							DAGstack.top().childcolor[i] = true;
+						break;
 					}						
 				}
 				if(t == types-1){ //all types have been visited
@@ -306,8 +293,13 @@ void SearchPrune::SpotTune(){
 		dag.g[*vp.first].configList = new int[2];
 		dag.g[*vp.first].configList[0] = -2;
 		dag.g[*vp.first].configList[1] = dag.g[*vp.first].assigned_type;
+		//debug
+		printf("task %d, config %d\n",*vp.first,dag.g[*vp.first].assigned_type);
+		dag.g[*vp.first].prices = new double[2];
 		dag.g[*vp.first].vmID = 0;
-
+	}
+	vp = vertices(dag.g);
+	for(; vp.first != vp.second; vp.first++){
 		std::vector<int*> cslot;
 		int iter = 0;
 		//if can reduce cost and still satisfy the deadline meet rate
@@ -356,8 +348,8 @@ void SearchPrune::SpotTune(){
 			dag.g[*vp.first].prices[0] = 0;
 		}else{
 			double exeTime[randomsize];
-			//check whether satisfy deadline
-			estimateTime(dag,exeTime); 
+			//check whether satisfy deadline///////////////////////
+			estimateTimeSpot(dag,exeTime); 
 			int count = 0;
 			for(int i=0; i<randomsize; i++){
 				if(exeTime[i]<dag.deadline)
@@ -408,6 +400,7 @@ void SearchPrune::OnlineSimulate(){
 	while(workflows.size()<num_jobs){
 		infile.getline(timing,256);
 		arrival_time = atof(timing);
+		arrival_time *= 60; //minutes to seconds
 
 		DAG* job = new DAG(this->dag.deadline+arrival_time,this->dag.meet_dl);
 		job->g = this->dag.g; job->type = this->dag.type;
@@ -429,10 +422,24 @@ void SearchPrune::OnlineSimulate(){
 		int tracelag = rand()%28800;
 		std::vector<VM*> VMTP[types];
 		std::vector<SpotVM*> sVMTP[types];
-		std::pair<vertex_iter, vertex_iter> vp = vertices(dag.g);
+		std::pair<vertex_iter, vertex_iter> vp;
+
+				
 		if(dag.type == montage){
-			for(int i=0; i<4; i++)
-				dag.g[i].status = ready;
+			for(int i=0; i<4; i++) {
+				for(int ij=0; ij<workflows.size(); ij++){
+					workflows[ij]->g[i].status = ready;
+					workflows[ij]->g[i].readyCountdown = -1;
+					workflows[ij]->g[i].restTime = 0;
+				}
+			}
+			for(int i=4; i<20; i++){
+				for(int ij=0; ij<workflows.size(); ij++){
+					workflows[ij]->g[i].status = not_ready;
+					workflows[ij]->g[i].readyCountdown = -1;
+					workflows[ij]->g[i].restTime = 0;
+				}
+			}
 		}else{
 			printf("what is the dag type?");
 			exit(1);
@@ -447,73 +454,92 @@ void SearchPrune::OnlineSimulate(){
 		float r[4];
 		int totalspotfail =0;
 		int totalspot = 0;
+		int totalondemand = 0;
 		do{
+			//accept workflows
+			std::vector<DAG*> jobs;
+			for(int i=0; i<workflows.size(); i++) {
+				//printf("i is:%d ",i);
+				if(workflows[i]->arrival_time <= t){
+					vp = vertices(workflows[i]->g);
+					if(workflows[i]->g[*(vp.second-1)].status != finished)
+						jobs.push_back(workflows[i]);
+				}
+				else { break;}
+			}
+
 			int spotfail = 0;
 			//step 0, check spotVM
-			int mark = tr->readprice(r);
-			if(r != NULL) {			
-					std::cout<<r[0]<<"\t"<<r[1]<<"\t"<<r[2]<<"\t"<<r[3]<<"\n";
-			}
-			else{
-				std::cout<< "cannot read the price\n";	
-			}
-			for(int i=0; i<types; i++){
-				int size = sVMTP[i].size();
-				for(int j=0; j<size; j++){
-					bool check;
-					check = function(sVMTP[i][j]->price, r[i]);//if not fail							
-					//if(check) sVMTP[i][j]->life_time = 10;
-					if(!check){		//failed	
-						spotfail += 1;
-						totalspotfail += 1;
-						if(sVMTP[i][j]->tk != NULL)	{
-							sVMTP[i][j]->canAlloc = false;
-							sVMTP[i][j]->tk->status = ready;
-							sVMTP[i][j]->tk->readyCountdown = -1;
-							//sVMTP[i][j]->tk->tasktime += t - sVMTP[i][j]->turn_on;//??
+			if(fmod(t, 60) == 0){ //check every minute
+				int mark = tr->readprice(r);
+				if(r != NULL) {			
+				//		std::cout<<r[0]<<"\t"<<r[1]<<"\t"<<r[2]<<"\t"<<r[3]<<"\n";
+				}
+				else{
+					std::cout<< "cannot read the price\n";	
+				}
+				for(int i=0; i<types; i++){
+					int size = sVMTP[i].size();
+					for(int j=0; j<size; j++){
+						bool check;
+						check = function(sVMTP[i][j]->price, r[i]);//if not fail							
+						//if(check) sVMTP[i][j]->life_time = 10;
+						if(!check){		//failed	
+							spotfail += 1;
+							totalspotfail += 1;
+							if(sVMTP[i][j]->tk != NULL)	{
+								sVMTP[i][j]->canAlloc = false;
+								sVMTP[i][j]->tk->status = ready;
+								sVMTP[i][j]->tk->readyCountdown = -1;
+								//sVMTP[i][j]->tk->tasktime += t - sVMTP[i][j]->turn_on;//??
 
-							bool isFound = false;
-							while(!isFound) {
-							//	sVMTP[i][j]->tk->vmID += 1;																	
+								bool isFound = false;
+								while(!isFound) {
+								//	sVMTP[i][j]->tk->vmID += 1;																	
 										
-								double pc = sVMTP[i][j]->tk->prices[sVMTP[i][j]->tk->vmID];										
+									double pc = sVMTP[i][j]->tk->prices[sVMTP[i][j]->tk->vmID];										
 										
-								if(pc > 1e-12){
-									isFound = true;
-									int index = sVMTP[i][j]->tk->configList[sVMTP[i][j]->tk->vmID];
-									sVMTP[i][j]->tk->restTime = sVMTP[i][j]->tk->probestTime[index][globaliter];
+									if(pc > 1e-12){
+										isFound = true;
+										int index = sVMTP[i][j]->tk->configList[sVMTP[i][j]->tk->vmID];
+										sVMTP[i][j]->tk->restTime = sVMTP[i][j]->tk->probestTime[index][globaliter];
+									}
+									else sVMTP[i][j]->tk->vmID += 1;																	
+										
 								}
-								else sVMTP[i][j]->tk->vmID += 1;																	
-										
+								sVMTP[i][j]->tk = NULL;									
 							}
-							sVMTP[i][j]->tk = NULL;									
 						}
 					}
 				}
 			}
 			//step 1
 			std::vector<taskVertex*> ready_task;
-			vp = vertices(dag.g);
-			for(int i=0; i < (*vp.second - *vp.first ); i++)
-			{
-				bool tag = true;
-				//get parent vertices
-				in_edge_iterator in_i, in_end;
-				edge_descriptor e;
-				for (boost::tie(in_i, in_end) = in_edges(i, dag.g); in_i != in_end; ++in_i) 
+			for(int ji=0; ji<jobs.size(); ji++){
+				vp = vertices(jobs[ji]->g);
+				for(int i=0; i < (*vp.second - *vp.first ); i++)
 				{
-					e = *in_i;
-					Vertex src = source(e, dag.g);					
-					if(dag.g[src].status != finished)
+					bool tag = true;
+					//get parent vertices
+					in_edge_iterator in_i, in_end;
+					edge_descriptor e;
+					for (boost::tie(in_i, in_end) = in_edges(i, jobs[ji]->g); in_i != in_end; ++in_i) 
 					{
-						tag = false;
-						//break;
+						e = *in_i;
+						Vertex src = source(e, jobs[ji]->g);					
+						if(jobs[ji]->g[src].status != finished)
+						{
+							tag = false;
+							//break;
+						}
+					}
+					if(jobs[ji]->g[i].status == ready || tag && jobs[ji]->g[i].status != scheduled && jobs[ji]->g[i].status != finished){
+						ready_task.push_back(&jobs[ji]->g[i]);							
 					}
 				}
-				if(dag.g[i].status == ready || tag && dag.g[i].status != scheduled && dag.g[i].status != finished){
-					ready_task.push_back(&dag.g[i]);							
-				}
 			}
+			
+			
 
 			int acqondemand = 0;
 			int acqspot = 0;
@@ -554,7 +580,7 @@ void SearchPrune::OnlineSimulate(){
 							for(int j=0; j<size&& !suitfind; j++)
 							{
 								double runtime = VMTP[ti][j]->life_time;
-								double availT = ceil(runtime/60.0)*60.0 - runtime;
+								double availT = ceil(runtime/3600.0)*3600.0 - runtime;
 
 								if(VMTP[ti][j]->tk == NULL && availT > curr_task->estTime[ti])
 								{
@@ -572,10 +598,16 @@ void SearchPrune::OnlineSimulate(){
 						curr_task->readyCountdown = 0;
 
 						if(suitisSpot){
+							if(sVMTP[suittp][suittpindex]->has_data == curr_task->name)
+								curr_task->restTime = curr_task->cpuTime[suittp] +  curr_task->netUp[suittp][globaliter];
+							else sVMTP[suittp][suittpindex]->has_data = curr_task->name;
 							sVMTP[suittp][suittpindex]->tk = curr_task;
 							curr_task->configList[curr_task->vmID] = suittp;
 							curr_task->prices[curr_task->vmID] = sVMTP[suittp][suittpindex]->price;
 						}else{
+							if(VMTP[suittp][suittpindex]->has_data == curr_task->name)
+								curr_task->restTime = curr_task->cpuTime[suittp] +  curr_task->netUp[suittp][globaliter];
+							else VMTP[suittp][suittpindex]->has_data = curr_task->name;
 							VMTP[suittp][suittpindex]->tk = curr_task;
 							curr_task->vmID = 1; //spot+ondemand
 							curr_task->configList[1] = suittp;
@@ -607,6 +639,11 @@ void SearchPrune::OnlineSimulate(){
 								{
 									find = true;
 									VMTP[_config][j]->tk = curr_task;
+									//if the needed input data is already on the instance
+									curr_task->restTime = curr_task->probestTime[_config][globaliter];
+									if(VMTP[_config][j]->has_data == curr_task->name)
+										curr_task->restTime = curr_task->cpuTime[_config] +  curr_task->netUp[_config][globaliter];
+									else VMTP[_config][j]->has_data = curr_task->name;
 									break;
 								}
 							}
@@ -617,6 +654,11 @@ void SearchPrune::OnlineSimulate(){
 								{
 									find = true;
 									sVMTP[_config][j]->tk = curr_task;
+									//if the needed input data is already on the instance
+									curr_task->restTime = curr_task->probestTime[_config][globaliter];
+									if(sVMTP[_config][j]->has_data == curr_task->name)
+										curr_task->restTime = curr_task->cpuTime[_config] +  curr_task->netUp[_config][globaliter];
+									else sVMTP[_config][j]->has_data = curr_task->name;
 									break;
 								}
 							}
@@ -624,8 +666,8 @@ void SearchPrune::OnlineSimulate(){
 						if(find) {
 							curr_task->status = scheduled;
 							curr_task->taskstart = t;
-							int index = curr_task->configList[curr_task->vmID];
-							curr_task->restTime = curr_task->probestTime[index][globaliter];
+							//int index = curr_task->configList[curr_task->vmID];
+							//curr_task->restTime = curr_task->probestTime[index][globaliter];							
 							curr_task->readyCountdown = 0;
 						}
 						else if(curr_task->vmID == 1) {curr_task->readyCountdown = OnDemandLag; curr_task->taskstart = t;}
@@ -636,7 +678,7 @@ void SearchPrune::OnlineSimulate(){
 				{
 					curr_task->status = scheduled;
 					int index = curr_task->configList[curr_task->vmID];
-					curr_task->restTime = curr_task->actTime[index];
+					curr_task->restTime = curr_task->probestTime[index][globaliter];
 
 					if(curr_task->vmID == 1)//ondemand VM
 					{
@@ -645,6 +687,7 @@ void SearchPrune::OnlineSimulate(){
 						vm->tk = curr_task;
 						vm->type = index;
 						vm->turn_on = t;
+						vm->has_data = curr_task->name;
 						VMTP[index].push_back(vm);
 						acqondemand += 1;
 					}
@@ -670,8 +713,9 @@ void SearchPrune::OnlineSimulate(){
 
 							svm->tk = curr_task; //it's spot vm
 							svm->type = index;
-							svm->life_time = 60; // - SpotLag
+							svm->life_time = 3600; // - SpotLag
 							svm->turn_on = t;
+							svm->has_data = curr_task->name;
 							sVMTP[index].push_back(svm);
 							acqspot += 1;
 						}
@@ -679,7 +723,7 @@ void SearchPrune::OnlineSimulate(){
 				}			
 			}
 			//delete VMs without task
-			int totalondemand = 0;
+			//int totalondemand = 0;
 			//int totalspot = 0;
 			int delondemand = 0;
 			int delspot = 0;
@@ -697,7 +741,7 @@ void SearchPrune::OnlineSimulate(){
 					{
 						double runtime = VMTP[i][j]->life_time;							
 						//moneycost += priceOnDemand[i]*runtime/60.0;
-						moneycost += priceOnDemand[i]*ceil(runtime/60.0);
+						moneycost += priceOnDemand[i]*ceil(runtime/3600.0);
 						VM* vm = VMTP[i][j];
 						delete vm;
 						VMTP[i].erase(VMTP[i].begin()+j);
@@ -707,10 +751,8 @@ void SearchPrune::OnlineSimulate(){
 					}
 				}
 					
-				for(int j=0; j<size2; j++)
-				{
-					if(sVMTP[i][j]->tk == NULL || (!sVMTP[i][j]->canAlloc))
-					{
+				for(int j=0; j<size2; j++) {
+					if(sVMTP[i][j]->tk == NULL || (!sVMTP[i][j]->canAlloc)) {
 						if(sVMTP[i][j]->tk == NULL && sVMTP[i][j]->canAlloc){
 							moneycost += r[i];
 						}
@@ -727,29 +769,29 @@ void SearchPrune::OnlineSimulate(){
 			}
 			//step 2
 			std::vector<taskVertex*> scheduled_task;
-			for(int i=0; i<(*vp.second - *vp.first ); i++)
-				if(dag.g[i].status == scheduled)
-					scheduled_task.push_back(&dag.g[i]);
-			for(int i=0; i<scheduled_task.size(); i++)
-			{
+			for(int ji=0; ji<jobs.size(); ji++)
+				for(int i=0; i<(*vp.second - *vp.first ); i++)
+					if(jobs[ji]->g[i].status == scheduled)
+						scheduled_task.push_back(&jobs[ji]->g[i]);
+			for(int i=0; i<scheduled_task.size(); i++) {
 				scheduled_task[i]->restTime -= 1;////////////////////////////
-				if(scheduled_task[i]->restTime <= 0) 
-				{
+				if(scheduled_task[i]->restTime <= 0) {
 					scheduled_task[i]->status = finished;
 					scheduled_task[i]->tasktime += t - scheduled_task[i]->taskstart;
+					scheduled_task[i]->end_time = t;
 					//deadline refinement and re-configuration
 					//first check if the child task has been changed by other tasks
-					out_edge_iterator out_i, out_end;
+					/*out_edge_iterator out_i, out_end;
 					Vertex v = scheduled_task[i]->name;
-					for (boost::tie(out_i, out_end) = out_edges(v, dag.g); out_i != out_end; ++out_i) 
-					{
+					for (boost::tie(out_i, out_end) = out_edges(v, dag.g); out_i != out_end; ++out_i) {
 						//if(dag.g[target(*out_i,dag.g)].start_time < t || (scheduled_task[i]->dl - t)/scheduled_task[i]->dl > 0.2)
+						//online tune
 						if(dag.g[target(*out_i,dag.g)].start_time < t || (dag.g[target(*out_i,dag.g)].start_time - t)/t > 0.2)
 						{
 							dag.g[target(*out_i, dag.g)].start_time = t;
 							dag.g[target(*out_i, dag.g)].instance_config();
 						}
-					}
+					}*/
 					//make the vm.task = NULL
 					int index = scheduled_task[i]->configList[scheduled_task[i]->vmID];
 					if(scheduled_task[i]->vmID == 1) //VM type
@@ -768,8 +810,8 @@ void SearchPrune::OnlineSimulate(){
 								break;
 							}
 					}
-			}	
-		}
+				}	
+			}
 			//step 3
 			for(int i=0; i<types; i++)
 			{
@@ -785,7 +827,7 @@ void SearchPrune::OnlineSimulate(){
 				{
 					sVMTP[i][j]->life_time -= 1;//
 					if(sVMTP[i][j]->life_time == 0){
-						sVMTP[i][j]->life_time = 60;
+						sVMTP[i][j]->life_time = 3600;
 						moneycost += r[i];
 					}
 				}
@@ -797,12 +839,15 @@ void SearchPrune::OnlineSimulate(){
 
 			condition = false;
 			int unfinishednum = 0;
-			for(int i=0; i < (*vp.second - *vp.first ); i++){
-				if(dag.g[i].status!= finished){
-					condition = true;
-					unfinishednum += 1;
+			for(int ji=0; ji<jobs.size(); ji++)
+				for(int i=0; i < (*vp.second - *vp.first ); i++){
+					if(jobs[ji]->g[i].status!= finished){
+						condition = true;
+						unfinishednum += 1;
 				}					
 			}
+			if(!condition)
+				printf("debug");
 		}while(condition);
 		//step 4 finalize
 		for(int i=0; i<types; i++)
@@ -811,7 +856,7 @@ void SearchPrune::OnlineSimulate(){
 			for(int j=0; j<size1; j++)
 			{
 				double runtime = VMTP[i][j]->life_time;
-				moneycost += (priceOnDemand[i] * ceil(runtime/60.0));
+				moneycost += (priceOnDemand[i] * ceil(runtime/3600.0));
 			}
 
 			int size = sVMTP[i].size();
@@ -824,21 +869,31 @@ void SearchPrune::OnlineSimulate(){
 		tr->closefile();
 		delete tr;
 
-		printf("Money Cost: %.4f, Time: %.2f\t tasktime:", moneycost, t);
+		printf("Money Cost: %.4f, Time: %.2f\n", moneycost, t);
+		double averagetime = 0;
+		double violation = 0;
+		for(int i=0; i<workflows.size(); i++){
+			vp = vertices(workflows[i]->g);
+			double executiontime = workflows[i]->g[*(vp.second-1)].end_time - workflows[i]->arrival_time;
+			averagetime += executiontime;
+			if(executiontime > dag.deadline) violation += 1;
+		}
+		averagetime /= workflows.size(); violation /= workflows.size();
+		printf("average execution time of workflows is %f, deadline violation is %f\n",averagetime,violation);
 //		for(int i=0; i<(*vp.second - *vp.first ); i++)
 //			printf("%.4f\t",dag.g[i].tasktime);
-		printf("\t task cost: ");
-		for(int i=0; i<(*vp.second - *vp.first ); i++)
-			printf("%.4f\t",dag.g[i].cost);
-		printf("spot: %d\n", totalspot);
+		//printf("\t task cost: ");
+		//for(int i=0; i<(*vp.second - *vp.first ); i++)
+		//	printf("%.4f\t",dag.g[i].cost);
+		//printf("spot: %d\n", totalspot);
 	}
 	std::clock_t endtime = std::clock();
 	double timeelapsed = (double)(endtime - starttime) / (double)CLOCKS_PER_SEC;
 	printf("time elapsed for Dyna Algorithm is: %.4f\n", timeelapsed);		
 }
 void SearchPrune::OfflineSP_BFS(){
-	DAG dag(this->dag);
-	
+	//DAG* dag(this->dag);
+	//DAG* dag = new DAG(this->dag);
 	//for the performance of each instance type
 	double random_sequential_io[types][randomsize];
 	double random_random_io[types][randomsize];
@@ -905,16 +960,20 @@ void SearchPrune::OfflineSP_BFS(){
 	vp = vertices(dag.g);
 	int quantile = dag.meet_dl * randomsize;
 	for(; vp.first != vp.second; vp.first++){
+		//dag.g[*vp.first].probestTime = new double[types][randomsize];
 		for(int t=0; t<types; t++){
 			for(int j=0; j<randomsize; j++){
-				dag.g[*vp.first].probestTime[t][j] = dag.g[*vp.first].estTime[t] + dag.g[*vp.first].trans_data * random_network_up[t][j] / 8
-					+ dag.g[*vp.first].rec_data * random_network_down[t][j] + dag.g[*vp.first].read_data / random_random_io[t][j] 
-				+ dag.g[*vp.first].seq_data / random_sequential_io[t][j];
+				dag.g[*vp.first].netUp[t][j] = dag.g[*vp.first].trans_data * random_network_up[t][j] / 8000;
+				dag.g[*vp.first].netDown[t][j] = dag.g[*vp.first].rec_data * random_network_down[t][j] / 8000;
+				dag.g[*vp.first].randomIO[t][j] = dag.g[*vp.first].read_data / random_random_io[t][j];
+				dag.g[*vp.first].seqIO[t][j] = dag.g[*vp.first].seq_data / random_sequential_io[t][j];
+				dag.g[*vp.first].probestTime[t][j] = dag.g[*vp.first].cpuTime[t] + dag.g[*vp.first].netUp[t][j]
+					+ dag.g[*vp.first].netDown[t][j] + dag.g[*vp.first].randomIO[t][j] + dag.g[*vp.first].seqIO[t][j];
 			}
 			//calculate the estimate time as the expected value of the proestTime
 			std::sort(std::begin(dag.g[*vp.first].probestTime[t]),std::end(dag.g[*vp.first].probestTime[t]));
 			dag.g[*vp.first].estTime[t] = dag.g[*vp.first].probestTime[t][quantile];
-			printf("type:%d,time:%f\n",t,dag.g[*vp.first].estTime[t]);
+			printf("task: %d, type: %d, time: %f\n",*vp.first,t,dag.g[*vp.first].estTime[t]);
 		}
 	}	
 	
@@ -931,7 +990,7 @@ void SearchPrune::OfflineSP_BFS(){
 	configstack initialstate;
 	for(vp=vertices(dag.g); vp.first!=vp.second; vp.first++)
 		initialstate.configurations.push_back(dag.g[*vp.first].assigned_type);
-	initialstate.taskno = -1;
+	initialstate.taskno = 0;
 	bool colors[types];
 	colors[0] = true;
 	for(int i=1; i<types; i++) colors[i] = false;
@@ -940,6 +999,7 @@ void SearchPrune::OfflineSP_BFS(){
 	int numoftasks = (*vp.second - *vp.first);
 	double globalBestCost = 0;
 	double exeTime[randomsize];
+	double totalTime = 0;
 	//start the search along the optGraph
 	DAGstack.push(initialstate);
 	bool continuesearch = true;
@@ -951,18 +1011,123 @@ void SearchPrune::OfflineSP_BFS(){
 				count ++;
 		}
 		double ratio = (double)count / (double)randomsize;
+		//totalTime = estimateTime2(dag);
+		//if(totalTime <= dag.deadline){	
 		//if satisfy users' requirement, select as the lower bound
 		if(ratio >= dag.meet_dl){
 			globalBestCost = estimateCost(dag,0,false);
 			continuesearch = false; //out of the while loop
+			printf("initial ratio in search prune: %f\n",ratio);
 		}else{
-			
+			int nexttype = types;
+			for(int i=0; i<types; i++){
+				if(!DAGstack.top().childcolor[i]){
+					nexttype = i;
+					break;
+				}
+			}			
+			if(nexttype < types){
+				//go to the next type
+				configstack state;
+				state.configurations = DAGstack.top().configurations;					
+				state.taskno = DAGstack.top().taskno;
+				state.configurations[state.taskno] = nexttype;
+				state.childcolor = new bool[types];									
+				state.childcolor[0] = true;
+				for(int tt=1; tt<types; tt++)
+					state.childcolor[tt] = DAGstack.top().childcolor[tt];
+				state.childcolor[nexttype] = true;	
+				DAGstack.push(state);	
+			}else{//go for the next task
+				configstack state;
+				state.configurations = DAGstack.top().configurations;					
+				state.taskno = DAGstack.top().taskno + 1;
+				if(state.taskno == numoftasks){
+					printf("cannot find a solution that satisfy deadline!\n");
+					exit(1);
+				}
+				state.configurations[state.taskno] = 1; //search from the smallest
+				state.childcolor = new bool[types];									
+				state.childcolor[0] = state.childcolor[1] = true;
+				for(int tt=2; tt<types; tt++)
+					state.childcolor[tt] = false;					
+				DAGstack.push(state);	
+			}
+			for(int i=0; i<numoftasks; i++)
+				dag.g[i].assigned_type = DAGstack.top().configurations[i];
 		}
 	}while(continuesearch);
+	//lower bound is found in DAGstack.top()
+	//continue search with the lower bound
+	std::vector<configstack> configsolutions;
+	configsolutions.push_back(DAGstack.top());
 	int typecount = 0;
 	do{
+		//continue search for better solutions
+		int nexttype = types;
+		for(int i=0; i<types; i++){
+			if(!DAGstack.top().childcolor[i]){
+				nexttype = i;
+				break;
+			}
+		}			
+		if(nexttype < types){
+			//go to the next type
+			configstack state;
+			state.configurations = DAGstack.top().configurations;					
+			state.taskno = DAGstack.top().taskno;
+			state.configurations[state.taskno] = nexttype;
+			state.childcolor = new bool[types];									
+			state.childcolor[0] = true;
+			for(int tt=1; tt<types; tt++)
+				state.childcolor[tt] = DAGstack.top().childcolor[tt];
+			state.childcolor[nexttype] = true;	
+			DAGstack.push(state);	
+		}else{//go for the next task
+			configstack state;
+			state.configurations = DAGstack.top().configurations;					
+			state.taskno = DAGstack.top().taskno + 1;
+			if(state.taskno == numoftasks){
+				//printf("cannot find a solution that satisfy deadline!\n");
+				//exit(1);
+				break;
+			}
+			state.configurations[state.taskno] = 1; //search from the smallest
+			state.childcolor = new bool[types];									
+			state.childcolor[0] = state.childcolor[1] = true;
+			for(int tt=2; tt<types; tt++)
+				state.childcolor[tt] = false;					
+			DAGstack.push(state);	
+		}
 		for(int i=0; i<numoftasks; i++)
+			dag.g[i].assigned_type = DAGstack.top().configurations[i];
+		double currentcost = estimateCost(dag,0,false);
+		if(currentcost < globalBestCost){
+			estimateTime(dag,exeTime);
+			//totalTime = estimateTime2(dag);
+			int count = 0;
+			for(int i=0; i<randomsize; i++){
+				if(exeTime[i]<=dag.deadline)
+					count ++;
+			}
+			double ratio = (double)count / (double)randomsize;
+			//if(totalTime <= dag.deadline){
+			if(ratio >= dag.meet_dl){
+				globalBestCost = currentcost;
+				//preserve the current configuration
+				configsolutions.push_back(DAGstack.top());
+				printf("found ratio in search prune: %f\n",ratio);
+				//configsolution = DAGstack.top();
+			}
+		}else{ //no need to continue search since the rest must be more expensive
+			//based on the assumption that adopting better instances must be more expensive!!!!!!!
+			//DAGstack.pop();
+			//go to the next task
+			for(int i=0; i<types; i++)
+				DAGstack.top().childcolor[i] = true;
+		}
+		/*for(int i=0; i<numoftasks; i++)
 			if(dag.g[i].assigned_type == types-1)
-				typecount += 1;
+				typecount += 1;*/
 	}while(typecount!=numoftasks);
 }

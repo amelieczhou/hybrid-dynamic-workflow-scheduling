@@ -127,7 +127,7 @@ int PricingModel::getPricing(int* config, double* estimateT, double* result){ //
 		result[resultsize-1] = this->demandPrice;		
 
 		//ondemand cost
-		double currentcost = (estimateT[configsize-1]+this->onDemandLag) * (this->demandPrice) / 60.0;
+		double currentcost = (estimateT[configsize-1]+this->onDemandLag) * (this->demandPrice) / 3600.0;
 
 		for(int cindex = configsize -2; cindex >= 0; cindex--){
 			if(config[cindex] >= 0){
@@ -137,7 +137,7 @@ int PricingModel::getPricing(int* config, double* estimateT, double* result){ //
 			
 			for(int pindex = 999; pindex >=0; pindex--){
 				double successp = this->configInfo[cindex][pindex]; 
-				double newcost = 1.0 * ((estimateT[cindex] +this->spotLag)* bp/60.0) + (1.0 - successp)*currentcost;
+				double newcost = 1.0 * ((estimateT[cindex] +this->spotLag)* bp/3600.0) + (1.0 - successp)*currentcost;
 
 				if(newcost < currentcost){
 					candp = bp;
