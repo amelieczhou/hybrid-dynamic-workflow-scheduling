@@ -5,3 +5,39 @@
 //#include <boost/math/distributions/gamma.hpp>
 //#include <boost/math/distributions/normal.hpp>
 
+class Dyna{
+public:
+	DAG* dag;
+
+	void Simulate();
+	Dyna() {}
+	Dyna(DAG* g) {dag = g;}
+
+};
+
+class DynaNPD{
+public:
+	DAG* dag;
+
+	void Simulate();
+	DynaNPD() {}
+	DynaNPD(DAG* g) {dag=g;}
+};
+
+class DynaNS{
+public:
+	DAG* dag;
+
+	void Simulate();
+	DynaNS() {}
+	DynaNS(DAG* g) {dag=g;}
+};
+
+class SpotOnly{
+public:
+	DAG* dag;
+	
+	void Simulate();
+	SpotOnly() {}
+	SpotOnly(DAG* g) {dag=g;}
+};

@@ -87,6 +87,8 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Dyna.cpp" />
+    <ClCompile Include="DynaNS.cpp" />
     <ClCompile Include="ExpcompareFive_2.cpp" />
     <ClCompile Include="InstanceConfig.cpp" />
     <ClCompile Include="PricingModel.cpp" />

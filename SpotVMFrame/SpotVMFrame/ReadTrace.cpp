@@ -3,6 +3,7 @@
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
+#include <fstream>
 #include <omp.h>
 
 #include "ReadTrace.h"
@@ -16,18 +17,59 @@ int ReadTrace::readfile(char* filename){
     return 0;
 }
 
-int ReadTrace::readfile(char* filename, int l){	    
+int ReadTrace::readfile(char* filename, int l){//read the l-th line 
     readfile(filename);
 	if(fp != NULL){
 		char str[1024]; // tmp buf for one line
 		for(int index = 0; index < l; index ++){
 			char* ptr = fgets(str, 1024, fp);
-		}
+		}	
 	}
 
 	return 0;
 }
-
+int ReadTrace::isreadfile(char* filename, int l){
+	std::ifstream is(filename);
+	for(int index=0; index < l-1; index ++){
+		is.ignore(std::numeric_limits<std::streamsize>::max(), '\n' );
+	}
+	char str[1024];
+	is.getline(str,1024,',');
+	return 0;
+}
+int ReadTrace::readtomem(char* filename, float* result){
+	readfile(filename);
+	if(fp!=NULL){
+		int setbufsize = setvbuf (fp , NULL , _IOFBF , 10240);
+		char str[4096];
+		char buf[32];
+		char *ptr, *ptr2;
+		int lines,cols;
+		if(strcmp(filename,"data1.csv")==0){
+			lines = 35971;
+			cols = 4;
+		}
+		else if(strcmp(filename,"tp.dat")==0){
+			lines = 800;
+			cols = 440;
+		}
+		for(int i=0; i<lines; i++){//totally 35971 lines in the trace
+			ptr = fgets(str,4096,fp);
+			for(int j=0; j<cols; j++){
+				ptr2 = strchr(ptr,',');
+				if(ptr2 == NULL){
+					ptr2 = strchr(ptr,'\n');
+					if(ptr2 == NULL) break;
+				}
+				memset(buf,0,32);
+				strncpy(buf,ptr,ptr2-ptr);
+				result[i*cols+j] = atof(buf);
+				ptr = ptr2 + 1;
+			}
+		}
+	}
+	return 0;
+}
 int ReadTrace::closefile(){
 	if(fp != NULL)
 		fclose(fp);
