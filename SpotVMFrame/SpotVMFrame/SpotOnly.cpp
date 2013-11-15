@@ -1,23 +1,58 @@
 #include "stdafx.h"
 #include "Algorithms.h"
 #include "PricingModel.h"
-#include <ctime>
+#include "ReadTrace.h"
+#include <time.h>
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <omp.h>
 
 using namespace boost;
-extern float lambda;
-extern int num_jobs;
-void DynaNS::Simulate(){	
 
-	std::vector<DAG*> workflows; //continuous workflow
+extern float lambda;
+
+void SpotOnly::bidpDeter(){
+	std::pair<vertex_iter,vertex_iter> vp = vertices(*dag->g);
+	for(;vp.first!=vp.second;vp.first++) {
+		int assignedtype = (*dag->g)[*vp.first].assigned_type;
+		(*dag->g)[*vp.first].prices[0] = 0.5*priceOnDemand[assignedtype];
+		//calculate task time distribution
+
+
+	}
+	//check if the deadline hit rate is satisfied
+	if(true)//satisfied
+		return;
+	else {
+		//for each task, search for bidding price
+		vp = vertices(*dag->g);
+		for(;vp.first!=vp.second;vp.first++){
+		
+
+		}
+	}
+}
+
+void SpotOnly::Simulate(){
+
 	float arrival_time = 0;
-	dag->arrival_time = 0;
+	dag->arrival_time = 0;	
+	float violation = 0;
+	float ave_cost = 0;
+	float ioseq[types],iorand[types],net_up[types],net_down[types];
+	omp_set_num_threads(24);
+	float viol_private[24];
+	float cost_private[24];
+	float fail_private[24];
+	for(int i=0; i<24; i++) fail_private[i]=viol_private[i]=cost_private[i]=0;
+
+	std::pair<vertex_iter, vertex_iter> vp;
+	time_t start,end;
+	std::vector<DAG*> workflows; //continuous workflow
 	workflows.push_back(dag);
 
-	std::pair<vertex_iter, vertex_iter> vp; 
 	std::ifstream infile;
 	std::string a = "arrivaltime_integer_";
 	std::string b;
@@ -26,45 +61,42 @@ void DynaNS::Simulate(){
 	b = strlamda.str();
 	std::string c = ".txt";
 	std::string fname = a + b + c;
-	char time[256];
+	char timee[256];
 	infile.open(fname.c_str());
 	if(infile==NULL){
 		printf("cannot find input file!\n");
 		return;
 	}
-	infile.getline(time,256); //jump the lamda line
-	infile.getline(time,256); //jump the 0 line
+	infile.getline(timee,256); //jump the lamda line
+	infile.getline(timee,256); //jump the 0 line
 	//incomming jobs
 	//while(arrival_time < max_t){
 	while(workflows.size()<(int)num_jobs){
-		infile.getline(time,256);
-		arrival_time = atof(time);
+		infile.getline(timee,256);
+		arrival_time = atof(timee);
 
 		DAG* job = new DAG(dag->deadline+arrival_time,dag->meet_dl);		
 		job->g = dag->g; job->type = dag->type;
 		job->arrival_time = arrival_time;
-		vp = vertices((*job->g));
+		vp = vertices(*job->g);
+		for(int i=0; i<(*vp.second - *vp.first); i++)
+			(*job->g)[i].sub_deadline += arrival_time;
 		workflows.push_back(job);
 	}
+	infile.close();
+	float* datatrace = new float[35971*4];
+	ReadTrace* tr = new ReadTrace();
+	tr->readtomem("data2.csv",datatrace);
+	tr->closefile();
+	delete tr;
 
-	float violation = 0;
-	float ave_cost = 0;
-	float ioseq[types],iorand[types],net_up[types],net_down[types];
 	//start simulation
-	std::clock_t starttime = std::clock();
-	omp_set_num_threads(24);
-	float viol_private[24];
-	float cost_private[24];
-	for(int i=0; i<24; i++) viol_private[i]=cost_private[i]=0;
+	time(&start);
 	#pragma omp parallel
 	{
 		#pragma omp for
-		for(int globaliter=0; globaliter<randomsize; globaliter++)
+		for(int monte=0; monte < randomsize; monte++)
 		{
-			//copy dag for each thread to simulate separately
-			//DAG* newdag = new DAG(*dag);
-			//each task has a distribution of execution time			
-			//assign resources in what order?
 			std::vector<DAG*> jobs;
 			for(int i=0; i<workflows.size(); i++){
 				DAG* newdag = new DAG(*workflows[i]);
@@ -73,24 +105,20 @@ void DynaNS::Simulate(){
 					(*newdag->g)[j].sub_deadline = (*workflows[i]->g)[j].sub_deadline;
 				jobs.push_back(newdag);
 			}
-
-			std::vector<VM*> VMTP[types];
 			std::vector<SpotVM*> sVMTP[types];
-			std::pair<vertex_iter, vertex_iter> vp;
-				
-			float t = 0; 
-			bool condition = false; //there are at least one job not finished
-			float moneycost = 0;
 
-			float r[4];
+			//EDF scheduling
+			double t = 0;
+			bool condition = false;
+			double moneycost = 0.0;
+			float r[types];
 			int totalspotfail =0;
 			int totalspot = 0;
-			int totalondemand = 0;
-			do{
+			do{	
 				//accept workflows
 				for(int i=0; i<jobs.size(); i++){
 					if((int)t == (int)jobs[i]->arrival_time){
-						if(jobs[i]->type == montage){
+						if(dag->type == montage){
 							for(int j=0; j<4; j++) {
 								(*jobs[i]->g)[j].status = ready;
 								(*jobs[i]->g)[j].readyCountdown = -1;
@@ -101,7 +129,7 @@ void DynaNS::Simulate(){
 								(*jobs[i]->g)[j].readyCountdown = -1;
 								(*jobs[i]->g)[j].restTime = 0;				
 							}
-						}else if(jobs[i]->type == ligo){
+						}else if(dag->type == ligo){
 							for(int j=0; j<9; j++) {
 								(*jobs[i]->g)[j].status = ready;
 								(*jobs[i]->g)[j].readyCountdown = -1;
@@ -112,7 +140,7 @@ void DynaNS::Simulate(){
 								(*jobs[i]->g)[j].readyCountdown = -1;
 								(*jobs[i]->g)[j].restTime = 0;	
 							}
-						}else if(jobs[i]->type == epigenome){				
+						}else if(dag->type == epigenome){				
 							(*jobs[i]->g)[0].status = ready;
 							(*jobs[i]->g)[0].readyCountdown = -1;
 							(*jobs[i]->g)[0].restTime = 0;	
@@ -125,113 +153,140 @@ void DynaNS::Simulate(){
 							printf("what is the dag type?");
 							exit(1);
 						}
-						//jobs.push_back(newdag);
-						//printf("add new dag\n");
 					}
 				}
-		
+				int spotfail = 0;
+				//step 0, check spotVM
+				if(fmod(t, 3) == 0){ //check every 3 minutes
+					int tracelag = rand()%35000;
+					for(int i=0; i<types; i++)
+						r[i] = datatrace[tracelag*types+i];
+					if(r != NULL) {			
+					//		std::cout<<r[0]<<"\t"<<r[1]<<"\t"<<r[2]<<"\t"<<r[3]<<"\n";
+					}
+					else{
+						std::cout<< "cannot read the price\n";	
+					}
+					for(int i=0; i<types; i++){
+						int size = sVMTP[i].size();
+						for(int j=0; j<size; j++){
+							bool check;
+							check = function(sVMTP[i][j]->price, r[i]);//if not fail		
+
+							if(!check){		//failed	
+								spotfail += 1;
+								totalspotfail += 1;
+								if(sVMTP[i][j]->tk != NULL)	{
+									////this run fails, stop the run
+									//condition = true;
+									////add it to fail
+									//int id= omp_get_thread_num();
+									//fail_private[id] += 1;
+									//goto finish;
+									sVMTP[i][j]->canAlloc = false;
+									sVMTP[i][j]->tk->status = ready;
+									sVMTP[i][j]->tk->readyCountdown = -1;
+									
+
+									
+									sVMTP[i][j]->tk = NULL;
+								}
+							}
+						}
+					}
+				}
 				//step 1
 				std::vector<taskVertex*> ready_task;
 				for(int ji=0; ji<jobs.size(); ji++){
-					vp = vertices((*jobs[ji]->g));
+					vp = vertices(*jobs[ji]->g);
 					for(int i=0; i < (*vp.second - *vp.first ); i++)
 					{
 						bool tag = true;
 						//get parent vertices
 						in_edge_iterator in_i, in_end;
 						edge_descriptor e;
-						boost::tie(in_i, in_end) = in_edges(i, (*jobs[ji]->g));
-						if(in_i == in_end)
-							tag = false;
-						else {
-							for (; in_i != in_end; ++in_i) 
-							{
+						boost::tie(in_i, in_end) = in_edges(i, *jobs[ji]->g);
+						if(in_i == in_end) tag = false;
+						else{
+							for (; in_i != in_end; ++in_i) 	{
 								e = *in_i;
-								Vertex src = source(e, (*jobs[ji]->g));					
-								if((*jobs[ji]->g)[src].status != finished)
-								{
+								Vertex src = source(e, *jobs[ji]->g);					
+								if((*jobs[ji]->g)[src].status != finished)	{
 									tag = false;
-									break;
+									//break;
 								}
 							}
 						}
 						if((*jobs[ji]->g)[i].status == ready || (tag && (*jobs[ji]->g)[i].status != scheduled && (*jobs[ji]->g)[i].status != finished)){
-							(*jobs[ji]->g)[i].status = ready;
 							ready_task.push_back(&(*jobs[ji]->g)[i]);							
 						}
 					}
-				}			
-				//sort according to the subdeadline, earliest deadline first
+				}
+				
 				//std::sort(ready_task.begin(),ready_task.end(), myfunction);
-
-				for(int i=0; i<ready_task.size(); i++)//no preference on who gets resources first
+				for(int i=0; i<ready_task.size(); i++)//earliest deadline first
 				{
 					taskVertex* curr_task=ready_task[i];
+					int _config = curr_task->assigned_type;
 					if(curr_task->readyCountdown == -1)//
 					{
-						int _config = curr_task->assigned_type;
 						bool find = false;
+						int foundindex = -1;
 						//check VM/SpotVM list for available machine
-						int size = VMTP[_config].size();
-						int vmindex = 0;
+						int size = sVMTP[_config].size();
 						for(int j=0; j<size; j++)
 						{
-							if(VMTP[_config][j]->tk == NULL)
+							if(sVMTP[_config][j]->tk == NULL&&sVMTP[_config][j]->life_time>=curr_task->probestTime[_config*randomsize+monte]&&sVMTP[_config][j]->canAlloc)
 							{
 								find = true;
-								vmindex = j;
-								VMTP[_config][j]->tk = curr_task;
+								sVMTP[_config][j]->tk = curr_task;
+								foundindex = j;
 								break;
 							}
 						}
 						if(find) {
 							curr_task->status = scheduled;
-							curr_task->taskstart = t;
-							curr_task->restTime = curr_task->probestTime[_config*randomsize+globaliter];
-
-							/*if(VMTP[_config][vmindex]->has_data == curr_task->name)
-								curr_task->restTime = curr_task->cpuTime[_config] +  curr_task->netUp[_config*randomsize+globaliter];
-							else VMTP[_config][vmindex]->has_data = curr_task->name;*/
+							curr_task->tasktime = t;
+							curr_task->restTime =  curr_task->probestTime[_config*randomsize+monte] ;
+							curr_task->readyCountdown = 0;
+							sVMTP[_config][foundindex]->tk = curr_task;
 						}
 						else 			
 						{
-							curr_task->readyCountdown = OnDemandLag;
-							curr_task->taskstart = t;
+							curr_task->readyCountdown = SpotLag;
+							curr_task->tasktime = t;
 						}
 					}
 					else if(curr_task->readyCountdown == 0)
 					{
 						curr_task->status = scheduled;
-						curr_task->restTime = curr_task->probestTime[curr_task->assigned_type*randomsize+globaliter];
+						curr_task->restTime = curr_task->probestTime[_config*randomsize+monte] ;
 
-						VM* vm = new VM; 
-						vm->life_time = OnDemandLag;
+						SpotVM* vm = new SpotVM(curr_task->prices[0]); 
+						vm->life_time = 60;
 						vm->tk = curr_task;
-						vm->type = curr_task->assigned_type;
-						VMTP[curr_task->assigned_type].push_back(vm);						
-					}
-				}			
-							
+						vm->type = _config;
+						sVMTP[_config].push_back(vm);						
+					}			
+				}
 				//delete VMs without task
-				int delondemand = 0;
-				for(int i=0; i<types; i++)
+				for(int i=0; i<types; i++)//////////
 				{
-					int size1 = VMTP[i].size();
-					totalondemand += size1;
+					int size1 = sVMTP[i].size();
 					
 					for(int j=0; j<size1; j++)
 					{
-						float runtime = VMTP[i][j]->life_time;
-						if(VMTP[i][j]->tk == NULL&& ((int)ceil(runtime)%60==0))
+						if(sVMTP[i][j]->tk == NULL || !sVMTP[i][j]->canAlloc)
 						{
-														
-							moneycost += priceOnDemand[i]*ceil(runtime/60.0);
-							VM* vm = VMTP[i][j];
+							if(sVMTP[i][j]->tk == NULL && sVMTP[i][j]->canAlloc){
+								moneycost += r[i];
+							}
+
+							SpotVM* vm = sVMTP[i][j];
 							delete vm;
-							VMTP[i].erase(VMTP[i].begin()+j);
+							sVMTP[i].erase(sVMTP[i].begin()+j);
 							j--;
-							size1 --;
-							delondemand += 1;
+							size1--;
 						}
 					}
 				}
@@ -247,29 +302,33 @@ void DynaNS::Simulate(){
 				for(int i=0; i<scheduled_task.size(); i++)
 				{
 					scheduled_task[i]->restTime -= 1;////////////////////////////
-					if(scheduled_task[i]->restTime <= 0) {
+					if(scheduled_task[i]->restTime <= 0) 
+					{
 						scheduled_task[i]->status = finished;
-						scheduled_task[i]->tasktime += t - scheduled_task[i]->taskstart;
 						scheduled_task[i]->end_time = t;
+						scheduled_task[i]->tasktime = t - scheduled_task[i]->tasktime;
+						scheduled_task[i]->cost = scheduled_task[i]->tasktime * priceOnDemand[scheduled_task[i]->assigned_type] /60.0;
 						//make the vm.task = NULL
-						int index = scheduled_task[i]->assigned_type;
-						for(int j=0; j<VMTP[index].size(); j++)
-							if(VMTP[index][j]->tk == scheduled_task[i])
+						for(int j=0; j<sVMTP[scheduled_task[i]->assigned_type].size(); j++)
+							if(sVMTP[scheduled_task[i]->assigned_type][j]->tk == scheduled_task[i])
 							{
-								VMTP[index][j]->tk = NULL;
+								sVMTP[scheduled_task[i]->assigned_type][j]->tk = NULL;
 								break;
-							}						
-					}	
-				}
-
+							}
+					}
+				}				
 				//step 3
 				for(int i=0; i<types; i++)
 				{
-					int size1 = VMTP[i].size();			
+					int size1 = sVMTP[i].size();			
 					
 					for(int j=0; j<size1; j++)
 					{
-						VMTP[i][j]->life_time += 1;				
+						sVMTP[i][j]->life_time -= 1;//
+						if(sVMTP[i][j]->life_time == 0){
+							sVMTP[i][j]->life_time = 60;
+							moneycost += r[i];
+						}			
 					}
 				}
 				for(int i=0; i<ready_task.size(); i++)//////////////////////////////////if >0
@@ -282,38 +341,15 @@ void DynaNS::Simulate(){
 				for(int ji=0; ji<jobs.size(); ji++){
 					vp = vertices((*jobs[ji]->g));
 					for(int i=0; i < (*vp.second - *vp.first ); i++){
-						if((*jobs[ji]->g)[i].status!= finished){
+						if((*jobs[ji]->g)[i].status!= finished)
+						{
 							condition = true;
 							unfinishednum += 1;
 						}					
 					}
-				}								
-			}while(condition);//there is a task not finished
-
-			for(int i=0; i<types; i++)
-			{
-				int size1 = VMTP[i].size();						
-				for(int j=0; j<size1; j++)
-				{
-					float runtime = VMTP[i][j]->life_time;
-					moneycost += (priceOnDemand[i] * ceil(runtime/60.0));
 				}
-			}
+			}while(condition);//there is a task not finished	
 			
-			printf("Money Cost: %.4f, Time: %.2f\n", moneycost, t);
-			int id = omp_get_thread_num();
-			printf("thread id is %d\n",id);
-			float ave_time = 0;
-			for(int i=0; i<jobs.size(); i++){
-				vp = vertices((*jobs[i]->g));
-				float executiontime = (*jobs[i]->g)[*(vp.second-1)].end_time - jobs[i]->arrival_time;
-				if(executiontime > jobs[i]->deadline) {
-					viol_private[id] += 1.0;
-				}		
-				ave_time += executiontime;
-			}
-			cost_private[id] += moneycost;
-			printf("average execution time of workflows is %f\n",ave_time/jobs.size());
 			for(int i=0; i<jobs.size(); i++){
 				delete jobs[i];
 			}
@@ -331,14 +367,7 @@ void DynaNS::Simulate(){
 		free((*dag->g)[*vp.first].randspot);
 	}
 	for(int i=0; i<24; i++) {
-		violation += viol_private[i];
-		ave_cost += cost_private[i];
+		violation += fail_private[i];
 	}
-
-	violation /= (float)randomsize*num_jobs;
-	ave_cost /= (float)randomsize*num_jobs;
-	printf("deadline meeting rate is %.2f, average cost is %.2f\n",1.0-violation,ave_cost);
-	std::clock_t endtime = std::clock();
-	float timeelapsed = (float)(endtime - starttime) / (float)CLOCKS_PER_SEC;
-	printf("time elapsed for Dyna Algorithm is: %.4f\n", timeelapsed);		
+	printf("number of fails is %f\n",violation);
 }

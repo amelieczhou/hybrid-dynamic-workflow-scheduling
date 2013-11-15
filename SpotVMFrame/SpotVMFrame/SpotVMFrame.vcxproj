@@ -55,6 +55,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>C:\boost_1_50_0</AdditionalLibraryDirectories>
+      <GenerateMapFile>false</GenerateMapFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -94,6 +95,8 @@
     <ClCompile Include="PricingModel.cpp" />
     <ClCompile Include="ReadTrace.cpp" />
     <ClCompile Include="SearchPrune.cpp" />
+    <ClCompile Include="SpotOnly.cpp" />
+    <ClCompile Include="StaticSC11.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>

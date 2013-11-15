@@ -38,6 +38,22 @@ public:
 	DAG* dag;
 	
 	void Simulate();
+	void bidpDeter();
 	SpotOnly() {}
 	SpotOnly(DAG* g) {dag=g;}
+};
+
+class Autoscaling{
+public:
+	DAG* dag;
+
+	void Initialize();
+	void Simulate();
+	Autoscaling(){}
+	Autoscaling(DAG* g){dag = g;}
+};
+
+class test{
+public:
+	void getCDF(int i);
 };

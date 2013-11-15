@@ -7,8 +7,6 @@ public:
 	int readtomem(char* filename, float* result);
 	int closefile();
 
-	//istream implementation
-	int isreadfile(char* filename, int l);
 private:
 	FILE* fp;
 };

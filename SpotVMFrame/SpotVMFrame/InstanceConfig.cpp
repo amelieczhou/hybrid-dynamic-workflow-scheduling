@@ -36,7 +36,7 @@ void DAG::reset(){
 	{
 		tasks[i]->reset();
 	}*/
-	std::pair<vertex_iter, vertex_iter> vp;
+	/*std::pair<vertex_iter, vertex_iter> vp;
 	vp = vertices(g);
 	for(; vp.first != vp.second; ++vp.first)
 	{
@@ -50,16 +50,16 @@ void DAG::reset(){
 		g[v].configList[0] = g[v].configList[2] = 0; g[v].configList[1] = 1;
 		g[v].prices[0]=g[v].prices[1]=g[v].prices[2] = 0;
 		g[v].cost = 0; g[v].tasktime = g[v].taskstart = 0;
-	}
+	}*/
 }
 
 std::vector<int> DAG::find_CP()
 {
 	std::vector<int> cp;	
-	property_map<Graph, vertex_distance_t>::type d_map = get(vertex_distance, this->g);
-	property_map<Graph, edge_weight_t>::type w_map = get(edge_weight, g);
+	property_map<Graph, vertex_distance_t>::type d_map = get(vertex_distance, *this->g);
+	property_map<Graph, edge_weight_t>::type w_map = get(edge_weight, *g);
 	typedef graph_traits<Graph>::vertex_descriptor vertex_descriptor;
-	vertex_descriptor s = *(vertices(this->g).first);
+	vertex_descriptor s = *(vertices(*this->g).first);
 
 #if defined(BOOST_MSVC) && BOOST_MSVC <= 1300
 	std::vector<default_color_type> color(num_vertices(g));
@@ -72,18 +72,18 @@ std::vector<int> DAG::find_CP()
 	dag_shortest_paths(g, s, d_map, w_map, &color[0], &pred[0], 
      vis, compare, combine, (std::numeric_limits<int>::max)(), 0);
 #else
-	std::vector<vertex_descriptor> p(num_vertices(g));
+	std::vector<vertex_descriptor> p(num_vertices(*g));
 	//all vertices start out as their own parent
 	typedef graph_traits<Graph>::vertices_size_type size_type;
-	for (size_type i =0; i< num_vertices(g); ++i)
+	for (size_type i =0; i< num_vertices(*g); ++i)
 		p[i] = i;
-    std::vector<float> d(num_vertices(g));   
+    std::vector<float> d(num_vertices(*g));   
 	//dag_shortest_paths(g, s, distance_map(d_map));
-	dag_shortest_paths(g, s, predecessor_map(&p[0]).distance_map(&d[0]));    
+	dag_shortest_paths(*g, s, predecessor_map(&p[0]).distance_map(&d[0]));    
 #endif
 	
-	int k = num_vertices(g);	
-	for(size_type i=(num_vertices(g)-1);i !=0;)
+	int k = num_vertices(*g);	
+	for(size_type i=(num_vertices(*g)-1);i !=0;)
 	{
 		cp.push_back(i); // assuming one exit and one entrance node
 		i = p[i];
@@ -134,257 +134,239 @@ void DAG::initDLAssign(){
 */
 }
 
-void DAG::deadline_assign()
-{
-	//deadline assignment
-	std::vector<int> critical_path = this->find_CP(); 	
-	float longest_time = 0, cheapest_cost =0;
-	for (int i=0; i<critical_path.size(); i++) {
-		longest_time += (this->g[critical_path[i]].estTime[0]);
-		//cheapest_cost += (this->g[critical_path[i]].estTime[0] + this->g[critical_path[i]].read_data / iospeed[0] 
-		//+ this->g[critical_path[i]].trans_data * net_up[0]/8 + this->g[critical_path[i]].rec_data *net_down[0] /8)*priceOnDemand[0] / 60.0;
-	}
-	//proportional assign deadline for tasks on critical path
-	float left_time = deadline;
-	for (int i = 0; i <critical_path.size(); i++)
-	{		
-		this->g[critical_path[i]].dl = left_time;
-		this->g[critical_path[i]].end_time = left_time;
-		left_time -= (this->g[critical_path[i]].estTime[0] )/longest_time * deadline;
-		if(left_time < 0) left_time = 0;
-		this->g[critical_path[i]].start_time = left_time;
-		this->g[critical_path[i]].mark = 1; //already assigned deadline
-		this->g[critical_path[i]].configList[0] = this->g[critical_path[i]].configList[2] = 0; //initially assigned to the cheapest machine
-		this->g[critical_path[i]].configList[1] = 1;
-	}
-	//topological sort
-	typedef std::vector<Vertex> container;
-	container c; //the nodes will be reversely stored accordingto their orders
-	topological_sort(this->g, std::back_inserter(c)); //depth firs search
-	
-	for (container::iterator ii=c.begin(); ii != c.end(); ++ii)
-	{
-		out_edge_iterator out_i, out_end;
-		edge_descriptor e;
-		Vertex v = *ii;
-		for (boost::tie(out_i, out_end) = out_edges(v, this->g); out_i != out_end; ++out_i) 
+void taskVertex::instance_config(){
+	for(int i=0; i<types; i++) //VM types from cheap to expensive
+		if(this->estTime[i] + OnDemandLag < (this->LFT - this->EST)) //data transfer time?? + OnDemandLag
 		{
-			adja_iterator ai, ai_end;
-			typedef property_map<Graph, vertex_index_t>::type id ;
-			id vertex_id = get(vertex_index, this->g);
-			boost::tie(ai,ai_end) = adjacent_vertices(v, this->g);
-			if(ai != ai_end && this->g[v].mark != 1) {
-				float earliest_Start = this->g[get(vertex_id, *ai)].start_time;
-				for (; ai != ai_end; ++ai)
-				{
-					if(this->g[get(vertex_id, *ai)].start_time < earliest_Start)
-						earliest_Start = this->g[get(vertex_id, *ai)].start_time;
-				}
-				this->g[v].end_time = this->g[v].dl = earliest_Start;
-				this->g[v].start_time = this->g[v].dl - (this->g[v].estTime[0])*deadline/longest_time;
-				this->g[v].mark = 1;
-				this->g[v].configList[0] = this->g[v].configList[2] = 0; this->g[v].configList[1] = 1;
-			}
-		}
-	}
-}
-
-void taskVertex::instance_config()
-{	
-	if((this->dl - this->start_time) < this->estTime[types-1]+OnDemandLag)//
-	{
-		//std::cout<<"fail for task config, cannot find such config!"<<std::endl;
-		//std::cout<<"fail for config"<<std::endl;
-		this->configList = new int[3];
-		this->configList[0] = this->configList[1]=-2;
-		this->configList[2] = types-1;
-		this->prices = new float[3];
-		this->prices[0] = this->prices[1] = 0;
-		//this->prices[2] = priceOnDemand[types-1];
-		PricingModel* pm = new PricingModel();
-		pm->init();
-		int config[4] = {-2,-2,this->configList[2],-1};
-				
-//		int demandconf = config[2];
-
-		float estT[4] = {this->estTime[0],this->estTime[0],this->estTime[types-1],-1};
-		float* bidp = new float[4];
-		pm->getPricing(config,estT, bidp);
-		this->prices[2] = bidp[3];
-
-		delete pm; delete[] bidp;
-		return ;	
-		//exit(1);
-	}
-	std::vector<int*> cslot;
-	//int count = 0;
-	int iter = 0;
-	
-	
-	int starttype = 0;
-	for(int j=0; j<types; j++)
-		if(this->estTime[j] < (this->dl - this->start_time ))
-		{
-			starttype = j;
+			prefer_type = i;
 			break;
 		}
-			
+}
+void DAG::deadline_assign()//each task is associated with a sub-deadline, a start time and an end time
+{
+	//deadline assignment, according to minimum execution time	
+	//new deadline assign method
+	std::pair<vertex_iter, vertex_iter> vp; 
+	vp = vertices(*this->g);
+	int size = num_vertices(*this->g);
+	(*this->g)[0].sub_deadline = (*this->g)[0].EST = 0;
+	(*this->g)[size-1].sub_deadline = (*this->g)[size-1].LFT = this->deadline;
+	(*this->g)[0].mark = (*this->g)[size-1].mark = 1;//have virtual task
+	for(int i=1; i<size-1; i++)
+		(*this->g)[i].mark = 0;
 
-	for(int l=starttype; l<types; l++) //the on demand vm
+	for(; vp.first!=vp.second; ++vp.first)
 	{
-		for(int k=l; k<types; k++)//the 1st spotvm
+		Vertex v = *vp.first;
+		(*this->g)[v].EST = EST((*this->g)[v],*this);
+	}
+	vp = vertices(*this->g);
+	for(;vp.first!=vp.second; --vp.second)
+	{
+		Vertex v = *vp.second-1;
+		(*this->g)[v].LFT = LFT((*this->g)[v],*this);
+	}
+	AssignParents(&(*this->g)[size-1],this);
+}
+double EST(taskVertex& tk, DAG job)
+{
+	double max = 0;
+	double tmp;
+	std::vector<Vertex> parents;
+
+	//get parent vertices
+	in_edge_iterator in_i, in_end;
+	edge_descriptor e;
+	for (boost::tie(in_i, in_end) = in_edges(tk.name, *job.g); in_i != in_end; ++in_i) 
+	{
+		e = *in_i;
+		Vertex src = source(e, *job.g);		
+		parents.push_back(src);
+		int test;
+		if((*job.g)[src].EST == 0)
+			test = 1;
+	}
+	if(parents.size() > 0)
+		max = (*job.g)[parents[0]].EST + (*job.g)[parents[0]].estTime[(*job.g)[parents[0]].prefer_type];
+	else max = tk.EST;
+	for(int i=1; i<parents.size(); i++)
+	{
+		tmp = (*job.g)[parents[i]].EST + (*job.g)[parents[i]].estTime[(*job.g)[parents[i]].prefer_type];
+		if(tmp > max) max = tmp;
+	}
+	return max;
+}
+double LFT(taskVertex& tk, DAG job)
+{
+	double min = 0;
+	double tmp;
+	std::vector<Vertex> children;
+
+	//get children vertices
+	out_edge_iterator out_i, out_end;
+	edge_descriptor e;
+	for (boost::tie(out_i, out_end) = out_edges(tk.name, (*job.g)); out_i != out_end; ++out_i) 
+	{
+		e = *out_i;
+		Vertex tgt = target(e,(*job.g));
+		children.push_back(tgt);
+	}
+	if(children.size() > 0)
+		min = (*job.g)[children[0]].LFT - (*job.g)[children[0]].estTime[(*job.g)[children[0]].prefer_type];
+	else min = tk.LFT;
+	for(int i=1; i<children.size(); i++)
+	{
+		tmp =  (*job.g)[children[i]].LFT - (*job.g)[children[i]].estTime[(*job.g)[children[i]].prefer_type];
+		if(tmp < min) min = tmp;
+	}
+	return min;
+}
+void AssignParents(taskVertex* tk, DAG* job)
+{	
+	while(has_unassigned_parent(tk,job))
+	{
+		taskVertex* ti = tk;
+		std::deque<Vertex> PCP;
+		while(has_unassigned_parent(ti,job))
 		{
-			float est_T = SpotLag + OnDemandLag;
-			est_T += this->estTime[k] + this->estTime[l];
-			if(est_T < (this->dl - this->start_time ))// + SpotLag + OnDemandLag 
-				{
-					int* slot = new int[3];
-					slot[0] = -2; slot[1]=k; slot[2]= l;
-					cslot.push_back(slot);
-					iter ++;
-					if(cslot.size() == 20) break;
-				}
-
-			for(int j=k+1; j<types; j++) //the 2nd spotvm
-			{
-				//j += 3; k += 3; //in total vms
-				float est_T = 2*SpotLag + OnDemandLag;
-				est_T += this->estTime[j] + this->estTime[k] + this->estTime[l];
-				if(est_T < (this->dl - this->start_time ))// + SpotLag + OnDemandLag 
-				{
-					int* slot = new int[3];
-					//cslot.resize(count+1);
-					//cslot[count] = new int[3];
-					//cslot[count][0]=j; cslot[count][1] = k; cslot[count][2]= l;//
-					slot[0] = k; slot[1]=j; slot[2]= l;
-					cslot.push_back(slot);
-					//count++;
-					iter ++;
-					if(cslot.size() == 20) break;
-				}
-			}
-			if(cslot.size() == 20) break;
+			Vertex v = CriticalParent(ti,job);
+			PCP.push_front(v);
+			ti = &(*job->g)[v];
 		}
-		if(cslot.size() == 20 || iter > 1000) break;			
-	}
-	int count = cslot.size();
-	if(count > 0 ) //&& !NoSpotVM)
-	{
-		//TaskList[i]->configList = cslot[0];
-		//set prices for configList/////////////////
-		//TaskList[i]->prices.resize(3, 1.0);
-		PricingModel* pm = new PricingModel();
-		pm->init();
-		std::vector<float*> bidps(count);
-		for(int j=0; j<count; j++)
+		AssignPath(PCP, job);
+		int size = PCP.size();
+		for(int iter1=0; iter1 <size; iter1++)
 		{
-			int config[4] = {cslot[j][0],cslot[j][1],cslot[j][2],-1};
-			float estT[4] = {this->estTime[cslot[j][0]],this->estTime[cslot[j][1]],this->estTime[cslot[j][2]],-1};
-			if(cslot[j][0] == -2) {	
-				estT[0] = this->estTime[0];
-			}		
-
-			bidps[j] = new float[4];
-			pm->getPricing(config,estT, bidps[j]);
-			//bidps.push_back(bidp);
-		}
-		pm->finalize();
-		delete pm;
-
-		float minp=bidps[0][0], min_index=0;
-		for(int j=1; j<count; j++)
-			if(bidps[j][0]<minp) min_index = j;
-		this->configList[0] = cslot[min_index][0]; //may be -2
-		this->configList[1] = cslot[min_index][1];
-		this->configList[2] = cslot[min_index][2];
-		//TaskList[i]->restTime = TaskList[i]->estimateTime[TaskList[i]->configList[0]];
-		//this->prices = new float[3];
-		this->prices[0] = bidps[min_index][1]; //may be 0
-		this->prices[1] = bidps[min_index][2];
-		this->prices[2] = bidps[min_index][3];
-		float tmpmincost = bidps[min_index][0];
-
-		//compare with demandonly
-		int* tmpconfig = new int[4];
-		tmpconfig[0] = tmpconfig[1] = -2;
-		tmpconfig[3] = -1;
-		tmpconfig[2] = types-1;
-		for(int j=0; j<types; j++)
-			if(this->estTime[j] < (this->dl - this->start_time ))
+			taskVertex tk1 = (*job->g)[PCP[iter1]];
+			//update EST for unassigned successors
+			//get children vertices
+			out_edge_iterator out_i, out_end;
+			edge_descriptor e;
+			for (boost::tie(out_i, out_end) = out_edges(tk1.name, (*job->g)); out_i != out_end; ++out_i) 
 			{
-				tmpconfig[2] = j;
-				break;
+				e = *out_i;
+				Vertex tgt = target(e,(*job->g));
+				if((*job->g)[tgt].mark == 0) {
+					if(tk1.EST + tk1.restTime > (*job->g)[tgt].EST)
+						(*job->g)[tgt].EST = tk1.EST + tk1.restTime;
+
+					taskVertex* task = &(*job->g)[tgt];
+					update_EST(task,job);
+				}
 			}
-		//TaskList[i]->restTime = TaskList[i]->estimateTime[TaskList[i]->configList[2]];		
-		pm = new PricingModel();
-		pm->init();						
-		int demandconf = tmpconfig[2];
-
-		float estT[4] = {this->estTime[0],this->estTime[0],this->estTime[demandconf],-1};
-		float* bidp = new float[4];
-		pm->getPricing(tmpconfig, estT, bidp);
-
-		delete pm;
-
-		if(bidp[0] <= tmpmincost){
-			this->configList[0] = this->configList[1] = -2;
-			this->configList[2] = tmpconfig[2];
-			//debug
-			if(tmpconfig[2]>3 || tmpconfig[2]<0)
+			//update LFT for unassigned predecessors
+			//get parent vertices
+			in_edge_iterator in_i, in_end;
+			edge_descriptor e1;
+			for (boost::tie(in_i, in_end) = in_edges(tk1.name, (*job->g)); in_i != in_end; ++in_i) 
 			{
-				printf("getPricing error\n");
+				e1 = *in_i;
+				Vertex src = source(e1, (*job->g));	
+				if((*job->g)[src].mark == 0){
+					if(tk1.LFT - tk1.restTime < (*job->g)[src].LFT)
+						(*job->g)[src].LFT = tk1.LFT - tk1.restTime;
+
+				taskVertex* task = &(*job->g)[src];
+				update_LFT(task,job);
+				}
 			}
-			
-			this->prices[0] = this->prices[1] = 0;
-			this->prices[2] = bidp[3];		
+			AssignParents(&tk1,job);
 		}
-
-		delete[] bidp; delete[] tmpconfig;
-		for(int i=0; i<count; i++)
-		{			 
-			delete[] bidps[i];
-			bidps.erase(bidps.begin() +i);
-			count--;
-			i--;
-		}
-
-	}
-	else {
-//			cout<<"cannot find any config for task "<< i <<endl;
-		//this->configList = new int[3];
-		this->configList[0] = this->configList[1] = -2;
-		for(int j=0; j<types; j++)
-			if(this->estTime[j] < (this->dl - this->start_time))
-			{
-				this->configList[2] = j;
-				break;
-			}
-		//TaskList[i]->restTime = TaskList[i]->estimateTime[TaskList[i]->configList[2]];
-		//this->prices = new float[3];
-		this->prices[0] = this->prices[1] = 0;
-		PricingModel* pm = new PricingModel();
-		pm->init();
-		int config[4] = {-2,-2,this->configList[2],-1};
-				
-		int demandconf = config[2];
-
-		float estT[4] = {this->estTime[0],this->estTime[0],this->estTime[demandconf],-1};
-		float* bidp = new float[4];
-		pm->getPricing(config,estT, bidp);
-		this->prices[2] = bidp[3];
-
-		delete pm; delete[] bidp;
-	}
-
-	count = cslot.size();
-	for(int i=0; i<count; i++)
-	{
-		delete[] cslot[i];
-		cslot.erase(cslot.begin() +i);
-		count--;
-		i--;
 	}
 }
+Vertex CriticalParent(taskVertex* tk, DAG* job)
+{
+	double max = 0;
+	Vertex maxP;
+	//get parent vertices
+	in_edge_iterator in_i, in_end;
+	edge_descriptor e;
+	for (boost::tie(in_i, in_end) = in_edges(tk->name, (*job->g)); in_i != in_end; ++in_i) 
+	{
+		e = *in_i;
+		Vertex src = source(e, (*job->g));		
+		if((*job->g)[src].EST + (*job->g)[src].estTime[(*job->g)[src].prefer_type] > max && (*job->g)[src].mark == 0)
+		{
+			maxP = src;
+			max = (*job->g)[src].EST + (*job->g)[src].estTime[(*job->g)[src].prefer_type];
+		}
+	}
+	return maxP;
+}
+bool has_unassigned_parent(taskVertex* tk, DAG* job)
+{
+	std::vector<Vertex> unassigned_parent;
+	//get parent vertices
+	in_edge_iterator in_i, in_end;
+	edge_descriptor e;
+	for (boost::tie(in_i, in_end) = in_edges(tk->name, (*job->g)); in_i != in_end; ++in_i) 
+	{
+		e = *in_i;
+		Vertex src = source(e, (*job->g));	
+		if((*job->g)[src].mark == 0)
+			return true;
+	}
+	return false;
+}
+void update_EST(taskVertex* tk, DAG* job)//update the EST of tk's unassigned children
+{
+	out_edge_iterator out_i, out_end;
+	edge_descriptor e;
+	for (boost::tie(out_i, out_end) = out_edges(tk->name, (*job->g)); out_i != out_end; ++out_i) 
+	{
+		e = *out_i;
+		Vertex tgt = target(e,(*job->g));
+		if((*job->g)[tgt].mark == 0){
+			if(tk->EST+tk->estTime[tk->prefer_type]>(*job->g)[tgt].EST)
+				(*job->g)[tgt].EST = tk->EST+tk->estTime[tk->prefer_type];
+			update_EST(&(*job->g)[tgt],job);
+		}
+	}
+}
+void update_LFT(taskVertex* tk, DAG* job)//update the LFT of tk's unassigned parents
+{
+	in_edge_iterator in_i, in_end;
+	edge_descriptor e;
+	for (boost::tie(in_i, in_end) = in_edges(tk->name, (*job->g)); in_i != in_end; ++in_i) 
+	{
+		e = *in_i;
+		Vertex src = source(e,(*job->g));
+		if((*job->g)[src].mark == 0){
+			if(tk->LFT - tk->estTime[tk->prefer_type] < (*job->g)[src].LFT)
+				(*job->g)[src].LFT = tk->LFT - tk->estTime[tk->prefer_type];
+			update_LFT(&(*job->g)[src],job);
+		}
+	}
+}
+void AssignPath(std::deque<Vertex> PCP, DAG* job)
+{
+	double longest_time = (*job->g)[PCP.back()].LFT - (*job->g)[PCP.front()].EST;
+	double total_execution = 0;
+	int size = PCP.size();
+	for(int iter=0; iter < size; iter++)
+	{
+		total_execution += (*job->g)[PCP[iter]].estTime[(*job->g)[PCP[iter]].prefer_type];
+	}
+	for(int iter=0; iter <size; iter++)
+		(*job->g)[PCP[iter]].restTime = longest_time*(*job->g)[PCP[iter]].estTime[(*job->g)[PCP[iter]].prefer_type]/total_execution; //the execution time assigned
+	for(int iter=0; iter <size; iter++)
+	{
+		if(iter == 0)
+		{
+			(*job->g)[PCP[iter]].sub_deadline = (*job->g)[PCP[iter]].EST + (*job->g)[PCP[iter]].restTime;
+			(*job->g)[PCP[iter]].mark = 1;
+		}
+		else{
+			int prev_iter = iter-1;
+			(*job->g)[PCP[iter]].EST = (*job->g)[PCP[prev_iter]].sub_deadline;
+			(*job->g)[PCP[iter]].restTime = longest_time*(*job->g)[PCP[iter]].estTime[(*job->g)[PCP[iter]].prefer_type]/total_execution;
+			(*job->g)[PCP[iter]].sub_deadline =  (*job->g)[PCP[iter]].EST + (*job->g)[PCP[iter]].restTime;
+			(*job->g)[PCP[size-iter-1]].LFT = (*job->g)[PCP[size-prev_iter-1]].LFT - (*job->g)[PCP[size-prev_iter-1]].restTime;
+			(*job->g)[PCP[iter]].mark = 1;
+		}
+	}
+}
+
 
 float rn_01()
 {

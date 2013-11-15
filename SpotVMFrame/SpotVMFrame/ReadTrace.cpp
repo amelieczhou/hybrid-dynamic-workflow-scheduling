@@ -28,33 +28,28 @@ int ReadTrace::readfile(char* filename, int l){//read the l-th line
 
 	return 0;
 }
-int ReadTrace::isreadfile(char* filename, int l){
-	std::ifstream is(filename);
-	for(int index=0; index < l-1; index ++){
-		is.ignore(std::numeric_limits<std::streamsize>::max(), '\n' );
-	}
-	char str[1024];
-	is.getline(str,1024,',');
-	return 0;
-}
+
 int ReadTrace::readtomem(char* filename, float* result){
 	readfile(filename);
 	if(fp!=NULL){
 		int setbufsize = setvbuf (fp , NULL , _IOFBF , 10240);
-		char str[4096];
+		char str[10240];
 		char buf[32];
 		char *ptr, *ptr2;
 		int lines,cols;
-		if(strcmp(filename,"data1.csv")==0){
+		if(strcmp(filename,"data1.csv")==0||strcmp(filename,"data2.csv")==0){
 			lines = 35971;
 			cols = 4;
 		}
-		else if(strcmp(filename,"tp.dat")==0){
+		else if(strcmp(filename,"tp.dat")==0||strcmp(filename,"newData/tp.dat")==0){
 			lines = 800;
 			cols = 440;
+		}else if(strcmp(filename,"ffp.dat")==0||strcmp(filename,"newData/ffp.dat")==0){
+			lines = 760;
+			cols = 800;
 		}
 		for(int i=0; i<lines; i++){//totally 35971 lines in the trace
-			ptr = fgets(str,4096,fp);
+			ptr = fgets(str,10240,fp);
 			for(int j=0; j<cols; j++){
 				ptr2 = strchr(ptr,',');
 				if(ptr2 == NULL){

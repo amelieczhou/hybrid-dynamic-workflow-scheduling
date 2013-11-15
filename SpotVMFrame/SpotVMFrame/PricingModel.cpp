@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <omp.h>
 
 int PricingModel::init(){
@@ -167,61 +168,66 @@ int PricingModel::getPricing(int* config, float* estimateT, float* result){ //co
 int PricingModel::finalize(){
 	return 0;
 }
-int PricingModel::generateFile(int fileno){
+int PricingModel::generateFile(int fileno){//index is the instance type
 	//generate the success rate files for spot instances
 	float bp = 0.001;
 	float candp = 0.0;
 	//first read all data in data.csv into memory
 	float datatrace[143884];//35971*4
 	ReadTrace* tr = new ReadTrace();
-	tr->readtomem("data1.csv",datatrace);
+	tr->readtomem("data2.csv",datatrace);
 	tr->closefile();
 	delete tr;
 
 	FILE* wFile;
 	char line[4];
-	wFile = fopen("newData/tp.dat","a");
+	wFile = fopen("newData/ffp.dat","w");
 	if(wFile == NULL)
 	{
-		printf("cannot open tp.dat file\n");
+		printf("cannot open ffp.dat file\n");
 		exit(1);
 	}
 	//for each bidding price
-	for(int j=0; j<800; j++) {
+	for(int j=0; j<760; j++) {
 		//for each execution time
-		float rate[440];
-		for(int i=0; i<440; i++) rate[i] = 0;
-		for(int timeslot=0; timeslot<110; timeslot++){
-			int totalsize = 1;
-			for(int i=0; i<totalsize; i++){ //1000 times, calculate average
-				int time = (timeslot+1)*3; //run for "time" long
-				int tracelag = rand()%35000;//0-34999, origin28800
-				bool fail[4] = {false,false,false,false};
-				//bool fail = false;
-				for(int t=0; t<time; t++){
-					for(int index=0; index<4; index++)
-						if( datatrace[(tracelag+t)*4+index] > bp)
-							fail[index] = true;
+		float rate[200*4];
+		for(int i=0; i<200*4; i++) rate[i] = 0;
 
-					if(fail[0]&&fail[1]&&fail[2]&&fail[3])
-						break;							
+		int totalsize = 1;
+		for(int i=0; i<totalsize; i++){ //1000 times, calculate average
+			int tracelag = rand()%35000;//0-34999, origin28800
+			omp_set_num_threads(4);
+			#pragma omp parallel	
+			{
+				#pragma omp for
+				for(int index =0; index<4; index++){
+					int time[] = {0,0,0,0};
+					while(time[index]<200*3){
+						if(datatrace[(tracelag+time[index])*4 + index]>bp){
+						//	int id = omp_get_thread_num();
+						//	printf("id:%d\n",id);
+							rate[index*200+(int)floor((float)time[index]/3.0)] += 1; //fail at time
+							break;
+						}
+						time[index] ++;
+					}
 				}
-				for(int index=0; index<4; index++)
-					if(!fail[index]) rate[index*110+timeslot]++;
 			}
-			for(int index=0; index<4; index++)
-				rate[index*110+timeslot] /= totalsize;
 		}
-
+		for(int timeslot=0; timeslot<200; timeslot++){
+			for(int index=0; index<4; index++)
+				rate[index*200+timeslot] /= totalsize;
+		}
 		for(int i=0; i<4; i++)
-			for(int k=0; k<110; k++){
-				sprintf(line,"%.3f",rate[i*110+k]);
+			for(int k=0; k<200; k++){
+				sprintf(line,"%.3f",rate[i*200+k]);
 				fputs(line,wFile);
-				if((i*110+k) == 439) fputs("\n",wFile);
+				if((i*200+k) == 799) fputs("\n",wFile);
 				else fputs(",",wFile);
 			}
 		bp += 0.001;
 	}
+
 	fclose(wFile);
 	return 0;
 }
