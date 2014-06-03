@@ -31,17 +31,18 @@ float estimateCost(const DAG& dag, int start, bool estimate)
 void estimateTime(DAG& dag, float* exeTime){
 	//run this function after each task is assigned with a instance type
 	//in this way, calculate as distribution
+	int cumulativesize = 4000;
 	std::pair<vertex_iter,vertex_iter> vp;
 	vp = vertices((*dag.g));
 	for(; vp.first!=vp.second; vp.first++){
 		(*dag.g)[*vp.first].tag = false; //not yet calculate its cumulative time
-		for(int i=0; i<randomsize; i++)
+		for(int i=0; i<cumulativesize; i++)
 			(*dag.g)[*vp.first].cumulativeTime[i] = 0;
 	}
 	vp = vertices((*dag.g));
-	float *tmpTime = (float*)malloc(randomsize*sizeof(float));
+	float *tmpTime = (float*)malloc(cumulativesize*sizeof(float));
 	for(; vp.first!=vp.second; vp.first++){
-		for(int i=0; i<randomsize; i++)
+		for(int i=0; i<cumulativesize; i++)
 			tmpTime[i] = 0;
 		//find all its parents
 		int config = (*dag.g)[*vp.first].assigned_type;
@@ -49,7 +50,7 @@ void estimateTime(DAG& dag, float* exeTime){
 		edge_descriptor e;
 		boost::tie(in_i, in_end) = in_edges(*vp.first, (*dag.g));
 		if(in_i == in_end) {
-			for(int i=0; i<randomsize; i++)
+			for(int i=0; i<cumulativesize; i++)
 				(*dag.g)[*vp.first].cumulativeTime[i] = (*dag.g)[*vp.first].probestTime[config*randomsize+i]+OnDemandLag;
 			(*dag.g)[*vp.first].tag = true;
 		}
@@ -96,6 +97,8 @@ void calmaxdistr(float* array1, float* array2, float* result, int length1, int l
 		result[i] = 0.0;
 	for(int i=0; i<length1; i++){
 		for(int j=0; j<length2; j++){
+			if(array1[i]!=0)
+				printf("");
 			if(i>=j){
 				result[i] += array1[i]*array2[j]; 
 			}else{//i<j

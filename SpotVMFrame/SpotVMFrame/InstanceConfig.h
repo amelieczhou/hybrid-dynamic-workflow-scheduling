@@ -100,10 +100,11 @@ public:
 		probestTime = (float*)malloc(types*randomsize*sizeof(float));
 		randomIO = (float*)malloc(types*randomsize*sizeof(float));
 		seqIO = (float*)malloc(types*randomsize*sizeof(float));
-		if(randomsize<4000) cumulativeTime = (float*)malloc(4000*sizeof(float));
+		if(randomsize>4000)
+			cumulativeTime = (float*)malloc(randomsize*sizeof(float));
 		else
-		cumulativeTime = (float*)malloc(randomsize*sizeof(float));
-		randspot = (float*)malloc(randomsize*400*sizeof(float));//spotdistrsize
+		cumulativeTime = (float*)malloc(4000*sizeof(float));
+		randspot = (float*)malloc(400*sizeof(float));//spotdistrsize
 	}
 	/*taskVertex(const taskVertex& task){
 		printf("copy constructor of taskVertex\n");
@@ -252,8 +253,8 @@ public:
 	void SpotTune2(int i);
 	//void OnlineSimulate();
 	//if return -1, no suitable bid for this spottype; otherwise returned value*0.001 is the bidding price
-	int binary_search(const float arr[], int low, int high, int taskno, int spottype);
-	int binary_search_heuristic(const float arr[], int low, int high, int taskno, int spottype);
+	int binary_search(const float* arr, int low, int high, int taskno, int spottype);
+	int binary_search_heuristic(const float* arr, int low, int high, int taskno, int spottype);
 
 //	SearchPrune();
 //	SearchPrune(DAG input){dag = input;}

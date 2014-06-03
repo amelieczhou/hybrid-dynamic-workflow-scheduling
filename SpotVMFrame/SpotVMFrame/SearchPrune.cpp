@@ -636,7 +636,7 @@ int SearchPrune::binary_search_heuristic(const float firstfail[], int low, int h
 			//	}
 				int iterindex = 0, count=0; 
 				float expectedtime = 0.0;
-				for(int kt=1; kt<(int)spottime; kt++){
+				for(int kt=0; kt<(int)spottime; kt++){
 					float timee = kt + ondemandtime;
 					int index = std::floor(kt /180.0);
 					if(index>iterindex){

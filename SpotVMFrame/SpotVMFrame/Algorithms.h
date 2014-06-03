@@ -40,7 +40,7 @@ public:
 	void Simulate();
 	void bidpDeter();
 	SpotOnly() {}
-	SpotOnly(DAG* g) {dag=g;}
+	SpotOnly(DAG* g) {dag=g;}	
 };
 
 class Autoscaling{

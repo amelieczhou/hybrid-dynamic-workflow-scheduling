@@ -13,24 +13,224 @@ using namespace boost;
 
 extern float lambda;
 
-void SpotOnly::bidpDeter(){
-	std::pair<vertex_iter,vertex_iter> vp = vertices(*dag->g);
-	for(;vp.first!=vp.second;vp.first++) {
-		int assignedtype = (*dag->g)[*vp.first].assigned_type;
-		(*dag->g)[*vp.first].prices[0] = 0.5*priceOnDemand[assignedtype];
-		//calculate task time distribution
-
-
+float recur_cal(int num_multiplier, int maxn,float* ffp){
+	if(num_multiplier==1){
+//		printf("mutiply %d\n",maxn);
+		return ffp[maxn];
 	}
+	else{
+		float result = 0.0;
+		for(int i=1; i<=maxn-num_multiplier+1; i++){
+			float tmp=recur_cal(num_multiplier-1,maxn-i,ffp);
+			result += ffp[i]*tmp;
+//			printf("%d \n",i);
+		}
+		return result;
+	}	
+}
+float calcu_pt(float* firstfail,float n,int rowindex,int spottype){
+	float result = 0.0;//returned probability
+	int columns=600;
+	float* ffp = (float*)malloc(columns*sizeof(float));
+	for(int i=0; i<columns; i++)
+		if(rowindex>=2520)
+			ffp[i] = 0.0;
+		else
+		ffp[i] = firstfail[rowindex*columns*4+spottype*columns+i];
+	int maxn = 3;
+	if(n<3) maxn = n;
+	for(int k=0; k<maxn; k++){//1 to n multipliers
+		int starter = n-k;
+		int multiplier = k+1;
+//		printf("calculating %d multipliers\n",multiplier);
+		/*for(int count=1; count<=multiplier; count++){
+			int tmp = count;
+			int tmp2 = k;
+			while(tmp>0){
+				recur_cal(tmp,tmp2,ffp);
+				tmp--;
+				tmp2--;
+			}		
+		}*/
+		result += recur_cal(multiplier,n,ffp);
+	}
+	free(ffp);
+	return result;
+}
+
+bool check_hitrate(Graph* graph, float deadline, float meetdl, float spotdistrgap){
+	//do the convolcation
+	float finalprob = 0.0;
+	int spotdistrsize = 400;
+	std::pair<vertex_iter,vertex_iter> vvp = vertices(*graph);
+	int* sizes = (int*)malloc((*vvp.second-*vvp.first)*sizeof(int));//save the distribution size for each task
+	for(; vvp.first != vvp.second; vvp.first++){
+		(*graph)[*vvp.first].tag = false;
+		sizes[*vvp.first] = spotdistrsize;		
+		for(int i=0; i<4000; i++)
+			(*graph)[*vvp.first].cumulativeTime[i]=0;//(*graph)[*vvp.first].randspot[i];
+	}
+
+	vvp = vertices(*graph);
+	for(; vvp.first != vvp.second; vvp.first++){
+		//find all its parents
+		in_edge_iterator in_i, in_end;
+		edge_descriptor e;
+		boost::tie(in_i, in_end) = in_edges(*vvp.first, (*graph));
+		if(in_i == in_end) {
+			(*graph)[*vvp.first].tag = true;
+			float sumtask = 0.0;
+			for(int i=0; i<spotdistrsize; i++){
+				(*graph)[*vvp.first].cumulativeTime[i] = (*graph)[*vvp.first].randspot[i];
+				sumtask += (*graph)[*vvp.first].cumulativeTime[i];
+			}
+			if(sumtask>1.0)
+				printf("");
+		}
+		else{//max operation, parents may have different cumulative sizes
+			if(*vvp.first == 16)
+				printf("");
+			int maxparentsize = 0;
+			int maxiter = 0;
+			for(; in_i!=in_end; ++in_i){
+				e = *in_i;
+				int src = source(e,(*graph));
+				if(maxparentsize<sizes[src]){
+					maxparentsize=sizes[src];
+					maxiter = src;
+				}
+			}
+			float* maxdistr = (float*)malloc(maxparentsize*sizeof(float));
+			float* tmpdistr = (float*)malloc(maxparentsize*sizeof(float));
+			for(int i=0; i<maxparentsize; i++){
+				maxdistr[i] = (*graph)[maxiter].cumulativeTime[i];
+				tmpdistr[i] = 0.0;
+			}
+			float sumtask = 0.0;
+			boost::tie(in_i, in_end) = in_edges(*vvp.first, (*graph));
+			for (; in_i != in_end; ++in_i) {
+				e = *in_i;
+				Vertex src = source(e,(*graph));
+				if(src != maxiter) {
+					calmaxdistr(maxdistr,(*graph)[src].cumulativeTime,tmpdistr,maxparentsize,sizes[src]);//cumu<0
+					for(int kk=0; kk<maxparentsize; kk++){
+						//maxdistr[kk]=maxdistr[kk]>(*graph)[src].cumulativeTime[kk]?maxdistr[kk]:(*graph)[src].cumulativeTime[kk];
+						maxdistr[kk]=tmpdistr[kk];
+				//		printf("%f\t",tmpdistr[kk]);
+						//sumtask += maxdistr[kk];
+					}								
+				}
+			}
+			for(int kk=0; kk<maxparentsize; kk++)
+				sumtask += maxdistr[kk];
+			if(sumtask>1.0)
+				printf("");
+			free(tmpdistr);
+			int colsize = 400+maxparentsize-1;//sizes[*vvp.first]+maxparentsize-1;
+			float* newdistr = (float*)malloc(colsize*sizeof(float));
+			//conv(maxdistr,(*graph)[*vvp.first].cumulativeTime,newdistr,maxparentsize,sizes[*vvp.first]);
+			conv(maxdistr,(*graph)[*vvp.first].randspot,newdistr,maxparentsize,400);
+			sumtask = 0.0;
+			for(int j=0; j<colsize; j++){
+				(*graph)[*vvp.first].cumulativeTime[j]=newdistr[j];
+				sumtask += newdistr[j];
+			}
+			if(sumtask>1.0) 
+				printf("");
+			sizes[*vvp.first] = colsize;
+			(*graph)[*vvp.first].tag = true;
+			free(newdistr);
+			free(maxdistr);
+		}
+	}//for vvp.first
+	for(int i=0; i<4000; i++){
+		//printf("%f\t",(*graph)[*vvp.second-1].cumulativeTime[i]);
+		if(i*spotdistrgap<deadline)
+			finalprob += (*graph)[*vvp.second-1].cumulativeTime[i];
+	}
+
+	//finalprob /= randomsize;
+	if(finalprob>=meetdl) return true;
+	else return false;
+}
+void update_randspot(DAG* dag, float* firstfail, int spotdistrsize, float spotdistrgap){
+	int columns = 2400;
+	std::pair<vertex_iter,vertex_iter> vp = vertices(*dag->g);
+	for(; vp.first!=vp.second; vp.first++){
+		for(int j=0; j<spotdistrsize; j++){
+			(*dag->g)[*vp.first].randspot[j]=0.0;
+		}
+		int assignedtype = (*dag->g)[*vp.first].assigned_type;
+		int rowindex = (int)((*dag->g)[*vp.first].prices[0]*1000) -1;
+		for(int rndindex=0; rndindex<randomsize; rndindex++){
+			std::vector<std::pair<float,float> > distri;
+			float shortesttime = (*dag->g)[*vp.first].probestTime[assignedtype*randomsize+rndindex];
+			float pinitial = 0.0;
+			for(int i=0; i<=shortesttime; i++){
+				if(rowindex>=2520)
+					pinitial += 0;
+				else
+				pinitial += firstfail[rowindex*columns+assignedtype*columns/4+i];
+			}
+			pinitial = 1-pinitial;
+			distri.push_back(std::pair<float,float>(shortesttime,pinitial));
+			float t = shortesttime+1;
+			while(t<2*shortesttime){
+				float pt = 0.0;//the probability of t
+				pt = pinitial*calcu_pt(firstfail,t-shortesttime,rowindex,assignedtype);
+				distri.push_back(std::pair<float,float>(t,pt));
+				t ++;
+			}
+			//assign to spotrand
+			for(int i=0; i<distri.size(); i++){
+				int id = (int)std::ceil(distri[i].first/spotdistrgap);
+				if(id >= spotdistrsize) 
+					(*dag->g)[*vp.first].randspot[spotdistrsize-1] += distri[i].second;
+				else (*dag->g)[*vp.first].randspot[id] += distri[i].second;
+			}
+		}//rndindex
+		for(int i=0; i<spotdistrsize; i++)
+			(*dag->g)[*vp.first].randspot[i] /= randomsize;
+	}
+}
+void SpotOnly::bidpDeter(){
+	//read in the ffp
+	int columns = 2400;
+	int spotdistrsize = 400;
+	float spotdistrgap = 1;//50;//mongtage deadline 17000//ceil(dag.deadline / spotdistrsize);
+	if(dag->type == ligo) spotdistrgap = 2;//125.0;//deadline 42000
+	else if(dag->type == epigenome) spotdistrgap = 1;//40.0;//deadline 15000
+	float *firstfail = new float[2520*2400];//[760*2400];
+	ReadTrace* tr = new ReadTrace();
+	tr->readtomem("newData/ffp_2.dat",firstfail);
+	tr->closefile();
+	delete tr;
+
+	std::pair<vertex_iter,vertex_iter> vp = vertices(*dag->g);
+	for(;vp.first!=vp.second;vp.first++) {		
+		int assignedtype = (*dag->g)[*vp.first].assigned_type;
+		(*dag->g)[*vp.first].prices = new float[1];
+		(*dag->g)[*vp.first].prices[0] = 0.5*priceOnDemand[assignedtype];	
+	}
+	update_randspot(dag,firstfail,spotdistrsize,spotdistrgap);
+	for(int i=0; i<400; i++)
+		printf("%f\t",(*dag->g)[*vp.second-1].randspot[i]);
 	//check if the deadline hit rate is satisfied
-	if(true)//satisfied
+	bool satisfied = check_hitrate(dag->g,dag->deadline,dag->meet_dl,spotdistrgap);
+	if(satisfied)//satisfied
 		return;
 	else {
-		//for each task, search for bidding price
-		vp = vertices(*dag->g);
-		for(;vp.first!=vp.second;vp.first++){
-		
-
+		while(!satisfied){
+			//for each task, search for bidding price
+			vp = vertices(*dag->g);
+			for(;vp.first!=vp.second;vp.first++){
+				//increase bidding price
+				(*dag->g)[*vp.first].prices[0]+= 0.02;
+				float test=(*dag->g)[*vp.first].prices[0];
+			}
+			//update randspot and re-check
+			update_randspot(dag,firstfail,spotdistrsize,spotdistrgap);
+			satisfied = check_hitrate(dag->g,dag->deadline,dag->meet_dl,spotdistrgap);
 		}
 	}
 }
@@ -42,11 +242,11 @@ void SpotOnly::Simulate(){
 	float violation = 0;
 	float ave_cost = 0;
 	float ioseq[types],iorand[types],net_up[types],net_down[types];
-	omp_set_num_threads(24);
-	float viol_private[24];
-	float cost_private[24];
-	float fail_private[24];
-	for(int i=0; i<24; i++) fail_private[i]=viol_private[i]=cost_private[i]=0;
+	omp_set_num_threads(20);
+	float viol_private[20];
+	float cost_private[20];
+	float fail_private[20];
+	for(int i=0; i<20; i++) fail_private[i]=viol_private[i]=cost_private[i]=0;
 
 	std::pair<vertex_iter, vertex_iter> vp;
 	time_t start,end;
@@ -349,13 +549,43 @@ void SpotOnly::Simulate(){
 					}
 				}
 			}while(condition);//there is a task not finished	
-			
+			//step 4 finalize
+			for(int i=0; i<types; i++)
+			{
+				int size = sVMTP[i].size();
+				for(int j=0; j<size; j++)
+				{				
+					moneycost += r[i];				
+				}
+			}
+			printf("Money Cost: %.4f, Time: %.2f\n", moneycost, t);
+			int id = omp_get_thread_num();
+			printf("thread id is %d\n",id);
+			float ave_time = 0;
+			for(int i=0; i<jobs.size(); i++){
+				vp = vertices((*jobs[i]->g));
+				float executiontime = (*jobs[i]->g)[*(vp.second-1)].end_time - jobs[i]->arrival_time;
+				if(executiontime > jobs[i]->deadline) {
+					viol_private[id] += 1.0;
+				}		
+				ave_time += executiontime;
+			}
+			cost_private[id] += moneycost;
+			printf("average execution time of workflows is %f\n",ave_time/jobs.size());
 			for(int i=0; i<jobs.size(); i++){
 				delete jobs[i];
 			}
 			jobs.clear();
 		}		
 	}
+	free(datatrace);
+	for(int i=0; i<24; i++) {
+		violation += viol_private[i];
+		ave_cost += cost_private[i];
+	}
+	violation /= (float)randomsize*num_jobs;
+	ave_cost /= (float)randomsize*num_jobs;
+	printf("deadline meeting rate is %f, average cost is %f\n",1.0-violation,ave_cost);
 	vp = vertices(*dag->g);
 	for(; vp.first!=vp.second; vp.first++){
 		free((*dag->g)[*vp.first].netDown);

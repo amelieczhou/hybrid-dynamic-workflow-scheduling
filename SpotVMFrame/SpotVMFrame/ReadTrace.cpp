@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <fstream>
+#include <iostream>
 #include <omp.h>
 
 #include "ReadTrace.h"
@@ -30,39 +31,82 @@ int ReadTrace::readfile(char* filename, int l){//read the l-th line
 }
 
 int ReadTrace::readtomem(char* filename, float* result){
-	readfile(filename);
-	if(fp!=NULL){
-		int setbufsize = setvbuf (fp , NULL , _IOFBF , 10240);
-		char str[10240];
-		char buf[32];
-		char *ptr, *ptr2;
-		int lines,cols;
-		if(strcmp(filename,"data1.csv")==0||strcmp(filename,"data2.csv")==0){
-			lines = 35971;
-			cols = 4;
-		}
-		else if(strcmp(filename,"tp.dat")==0||strcmp(filename,"newData/tp.dat")==0){
-			lines = 800;
-			cols = 440;
-		}else if(strcmp(filename,"ffp.dat")==0||strcmp(filename,"newData/ffp.dat")==0){
-			lines = 760;
-			cols = 800;
-		}
-		for(int i=0; i<lines; i++){//totally 35971 lines in the trace
-			ptr = fgets(str,10240,fp);
-			for(int j=0; j<cols; j++){
-				ptr2 = strchr(ptr,',');
-				if(ptr2 == NULL){
-					ptr2 = strchr(ptr,'\n');
-					if(ptr2 == NULL) break;
-				}
-				memset(buf,0,32);
-				strncpy(buf,ptr,ptr2-ptr);
-				result[i*cols+j] = atof(buf);
-				ptr = ptr2 + 1;
-			}
-		}
+	//readfile(filename);
+	std::ifstream fin(filename);
+	char str[14400];
+	char buf[32];
+	char *ptr, *ptr2;
+	int lines,cols;
+	if(strcmp(filename,"data1.csv")==0||strcmp(filename,"data2.csv")==0){
+		lines = 35971;
+		cols = 4;
 	}
+	else if(strcmp(filename,"tp.dat")==0||strcmp(filename,"newData/tp.dat")==0){
+		lines = 800;
+		cols = 440;
+	}else if(strcmp(filename,"ffp_2.dat")==0||strcmp(filename,"newData/ffp_2.dat")==0){
+		lines = 2520;//760;
+		cols = 2400;
+	}
+	int i=0;
+	while(fin.getline(str,14400)&&i<lines){
+		ptr=str;
+		for(int j=0; j<cols; j++){
+			//if(j==2399)
+				//printf("");
+			ptr2 = strchr(ptr,',');
+			if(ptr2 == NULL){
+				ptr2 = strchr(ptr,'\n');
+				if(ptr2 == NULL) {
+					memset(buf,0,32);
+					strncpy(buf,ptr,5);
+					result[i*cols+j] = atof(buf);
+					break;
+				}
+			}
+			memset(buf,0,32);
+			strncpy(buf,ptr,ptr2-ptr);
+			result[i*cols+j] = atof(buf);
+			ptr = ptr2 + 1;
+			
+		//	printf("%d\n",j);
+		}
+		i++;
+	}
+	//if(fp!=NULL){
+	//	int setbufsize = setvbuf (fp , NULL , _IOFBF , 14400);
+	//	char str[14400];
+	//	char buf[32];
+	//	char *ptr, *ptr2;
+	//	int lines,cols;
+	//	if(strcmp(filename,"data1.csv")==0||strcmp(filename,"data2.csv")==0){
+	//		lines = 35971;
+	//		cols = 4;
+	//	}
+	//	else if(strcmp(filename,"tp.dat")==0||strcmp(filename,"newData/tp.dat")==0){
+	//		lines = 800;
+	//		cols = 440;
+	//	}else if(strcmp(filename,"ffp_2.dat")==0||strcmp(filename,"newData/ffp_2.dat")==0){
+	//		lines = 760;
+	//		cols = 2400;
+	//	}
+	//	for(int i=0; i<lines; i++){//totally 35971 lines in the trace
+	//		ptr = fgets(str,14400,fp);
+	//		for(int j=0; j<cols; j++){
+	//			ptr2 = strchr(ptr,',');
+	//			if(ptr2 == NULL){
+	//				ptr2 = strchr(ptr,'\n');
+	//				if(ptr2 == NULL) break;
+	//			}
+	//			memset(buf,0,32);
+	//			strncpy(buf,ptr,ptr2-ptr);
+	//			result[i*cols+j] = atof(buf);
+	//			ptr = ptr2 + 1;
+
+	//			printf("%d\n",j);
+	//		}
+	//	}
+	//}
 	return 0;
 }
 int ReadTrace::closefile(){

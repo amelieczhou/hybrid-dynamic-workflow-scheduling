@@ -574,7 +574,11 @@ int main(int argc, char* argv[])
 		optimizer->OfflineAstar();
 		//every assigned type is spot
 		SpotOnly* spotOptimizer = new SpotOnly(&optimizer->dag);
+		time_t start,end;
+		time(&start);
 		spotOptimizer->bidpDeter();
+		time(&end);
+		printf("time for spotonly determining bidding price is %.4f\n",difftime(end,start));
 		spotOptimizer->Simulate();
 	}else if(strcmp(argv[7],"Autoscaling")==0){
 		Autoscaling* autoOptimizer = new Autoscaling(dag);
