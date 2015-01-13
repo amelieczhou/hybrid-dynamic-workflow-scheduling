@@ -3,56 +3,55 @@
 #include "PricingModel.h"
 
 
-float estimateCost(const DAG& dag, int start, bool estimate)
+float estimateCost(const DAG& dag, int start, int end, bool estimate)//from start to end, inclusive
 {   //expected cost
 	float totalcost = 0;
-	float onehour = 3600.0;
-	std::pair<vertex_iter,vertex_iter> vp;
-	vp = vertices((*dag.g));
+	float onehour = 3600.0;	
+	int task = 0;
 	//do not round up to 1 hour
-	vp.first += start;
-	for(; vp.first !=vp.second; vp.first++){
+	task += start;
+	for(; task <= end; task++){
 		float taskcost = 0;
 		if(!estimate) { //calculate according to assigned instance type
-			int config = (*dag.g)[*vp.first].assigned_type;
+			int config = (*dag.g)[task].assigned_type;
 			for(int i=0; i<randomsize; i++)
-				taskcost += ((*dag.g)[*vp.first].probestTime[config*randomsize+i]+OnDemandLag)/onehour*priceOnDemand[config];//ceil?
+				taskcost += ((*dag.g)[task].probestTime[config*randomsize+i]+OnDemandLag)/onehour*priceOnDemand[config];//ceil?
 			totalcost += taskcost / randomsize;
 		}else{	//estimate according to the small instance type
 			float taskcost = 0;
 			for(int i=0; i<randomsize; i++)
-				taskcost += ((*dag.g)[*vp.first].probestTime[i]+OnDemandLag)/onehour*priceOnDemand[0];//ceil?
+				taskcost += ((*dag.g)[task].probestTime[i]+OnDemandLag)/onehour*priceOnDemand[0];//ceil?
 			totalcost += taskcost / randomsize;
 		}
 	}
 	return totalcost;
 }
 
-void estimateTime(DAG& dag, float* exeTime){
+void estimateTime(DAG& dag, int start, int end, float* exeTime){//inclusive of start and end
 	//run this function after each task is assigned with a instance type
 	//in this way, calculate as distribution
-	int cumulativesize = 4000;
-	std::pair<vertex_iter,vertex_iter> vp;
-	vp = vertices((*dag.g));
-	for(; vp.first!=vp.second; vp.first++){
-		(*dag.g)[*vp.first].tag = false; //not yet calculate its cumulative time
+	int cumulativesize = 4000;	
+	int taskid = 0;
+	taskid += start;
+	for(; taskid <= end; taskid++){
+		(*dag.g)[taskid].tag = false; //not yet calculate its cumulative time
 		for(int i=0; i<cumulativesize; i++)
-			(*dag.g)[*vp.first].cumulativeTime[i] = 0;
+			(*dag.g)[taskid].cumulativeTime[i] = 0;
 	}
-	vp = vertices((*dag.g));
+	
 	float *tmpTime = (float*)malloc(cumulativesize*sizeof(float));
-	for(; vp.first!=vp.second; vp.first++){
+	for(taskid = start; taskid<=end; taskid++){
 		for(int i=0; i<cumulativesize; i++)
 			tmpTime[i] = 0;
 		//find all its parents
-		int config = (*dag.g)[*vp.first].assigned_type;
+		int config = (*dag.g)[taskid].assigned_type;
 		in_edge_iterator in_i, in_end;
 		edge_descriptor e;
-		boost::tie(in_i, in_end) = in_edges(*vp.first, (*dag.g));
+		boost::tie(in_i, in_end) = in_edges(taskid, (*dag.g));
 		if(in_i == in_end) {
 			for(int i=0; i<cumulativesize; i++)
-				(*dag.g)[*vp.first].cumulativeTime[i] = (*dag.g)[*vp.first].probestTime[config*randomsize+i]+OnDemandLag;
-			(*dag.g)[*vp.first].tag = true;
+				(*dag.g)[taskid].cumulativeTime[i] = (*dag.g)[taskid].probestTime[config*randomsize+i]+OnDemandLag;
+			(*dag.g)[taskid].tag = true;
 		}
 		else{
 			for (; in_i != in_end; ++in_i) {
@@ -69,13 +68,13 @@ void estimateTime(DAG& dag, float* exeTime){
 			}
 		}
 		for(int i=0; i<randomsize; i++){
-			(*dag.g)[*vp.first].cumulativeTime[i] = tmpTime[i] + (*dag.g)[*vp.first].probestTime[config*randomsize+i] + OnDemandLag;
+			(*dag.g)[taskid].cumulativeTime[i] = tmpTime[i] + (*dag.g)[taskid].probestTime[config*randomsize+i] + OnDemandLag;
 		}
-		(*dag.g)[*vp.first].tag = true;
+		(*dag.g)[taskid].tag = true;
 	}
 	//if(dag.type == montage)
 		for(int i=0; i<randomsize; i++){
-			exeTime[i] = (*dag.g)[*(vp.second-1)].cumulativeTime[i];////////////////////////////
+			exeTime[i] = (*dag.g)[end].cumulativeTime[i];////////////////////////////
 	}
 	free(tmpTime);
 }
@@ -175,3 +174,18 @@ void calmaxdistr(float* array1, float* array2, float* result, int length1, int l
 //	}
 //}
 //}
+
+bool dominates(individual* a, individual* b){
+	bool d=false;
+	if(a->objectives.first < b->objectives.first && a->objectives.second < b->objectives.second)
+		d = true;
+
+	return d;
+}
+
+float calcDistance(individual* a, individual* b){
+	float distance = 0.0;
+	distance += std::pow(a->objectives.first -b->objectives.first,2) + std::pow(a->objectives.second-b->objectives.second,2);
+	distance = std::sqrt(distance);
+	return distance;
+}

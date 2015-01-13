@@ -235,12 +235,13 @@ void SearchPrune::OfflineAstar(){
 	
 	//A* Search
 	vp = vertices((*dag.g));
+	int numoftasks = (*vp.second - *vp.first);
 	for(; vp.first != vp.second; vp.first++){
 		(*dag.g)[*vp.first].assigned_type = 0;//initially all assigned to small
 	}
 	if(false){
 		float* exeTime1 = (float*)malloc(randomsize*sizeof(float));
-		estimateTime(dag,exeTime1);
+		estimateTime(dag,0,numoftasks-1,exeTime1);
 		float maxtime = 0.0, mintime = 0.0;
 	
 		for(int i=0; i<randomsize; i++)
@@ -250,7 +251,7 @@ void SearchPrune::OfflineAstar(){
 		for(; vp.first != vp.second; vp.first++){
 			(*dag.g)[*vp.first].assigned_type = types-1;//initially all assigned to small
 		}
-		estimateTime(dag,exeTime1);
+		estimateTime(dag,0,numoftasks-1,exeTime1);
 		for(int i=0; i<randomsize; i++)
 			mintime += exeTime1[i];
 		mintime /= randomsize;
@@ -270,14 +271,14 @@ void SearchPrune::OfflineAstar(){
 	}
 	initialstate->taskno = -1;
 	vp=vertices((*dag.g));
-	int numoftasks = (*vp.second - *vp.first);
+	
 	float globalBestCost = 1000000;
 	float* exeTime = (float*)malloc(randomsize*sizeof(float));
 	DAGstack.push(initialstate);
     bool continuesearch = true;
 	//find a lower bound first
 	do{
-		estimateTime(dag,exeTime); ///////////////////////////////////////////start from certain task, look up for the known part
+		estimateTime(dag,0,numoftasks-1,exeTime); ///////////////////////////////////////////start from certain task, look up for the known part
 		int count = 0;
 		for(int i=0; i<randomsize; i++){
 			if(exeTime[i]<=dag.deadline)
@@ -286,7 +287,7 @@ void SearchPrune::OfflineAstar(){
 		float ratio = (float)count / (float)randomsize;
 		//if satisfy users' requirement, select as the lower bound
 		if(ratio >= dag.meet_dl){
-			globalBestCost = estimateCost(dag,0,false);
+			globalBestCost = estimateCost(dag,0,numoftasks-1,false);
 			DAGstack.top()->fvalue = globalBestCost;
 			continuesearch = false; //out of the while loop
 			printf("initial ratio in search prune: %f\n",ratio);
@@ -333,7 +334,7 @@ void SearchPrune::OfflineAstar(){
 		//check if satisfy deadline 
 		for(int i=0; i<numoftasks; i++)
 			(*dag.g)[i].assigned_type = headnode->configurations[i];
-		estimateTime(dag,exeTime); ///////////////////////////////////////////start from certain task, look up for the known part
+		estimateTime(dag,0,numoftasks-1,exeTime); ///////////////////////////////////////////start from certain task, look up for the known part
         int count = 0;
         for(int i=0; i<randomsize; i++){
 			if(exeTime[i]<=dag.deadline)
@@ -364,7 +365,7 @@ void SearchPrune::OfflineAstar(){
 				//dag.g[nexttask].assigned_type = t;				
 				for(int ii=0; ii<numoftasks; ii++)
 					(*dag.g)[ii].assigned_type = state->configurations[ii];
-				float currentcost = estimateCost(dag,0,false);
+				float currentcost = estimateCost(dag,0,numoftasks-1,false);
 				if(currentcost >= globalBestCost || std::find(Closeset.begin(),Closeset.end(),state) != Closeset.end()){//std::binary_search(Closeset.begin(),Closeset.end(),state)){
 					//just ignore this configuration
 				}else{
@@ -387,7 +388,7 @@ void SearchPrune::OfflineAstar(){
 		(*dag.g)[i].assigned_type = solutions.back().configurations[i];
 	//calculate the cumulative time distribution of the dag
 	float* cumulative=(float*)malloc(randomsize*sizeof(float));
-	estimateTime(dag,cumulative);
+	estimateTime(dag,0,numoftasks-1,cumulative);
 	dag.cumulativetime = cumulative;
 
 	free(cumulative);

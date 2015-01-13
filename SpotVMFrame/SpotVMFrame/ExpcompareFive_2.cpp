@@ -24,6 +24,7 @@ float Times[4][types] = {{120,65,38,24},{90,50,30,20},{60,35,23,17},{30,20,15,13
 float lambda;
 int num_jobs;
 int randomsize;
+double budget;
 
 int main(int argc, char* argv[])
 {	
@@ -48,6 +49,7 @@ int main(int argc, char* argv[])
 	lambda = atof(argv[4]);
 	num_jobs = atoi(argv[5]);
 	randomsize = atoi(argv[6]);
+	budget = atof(argv[9]);
 
 	/*for(int i=0; i<4; i++)
 		for(int j=1; j<types; j++)
@@ -583,6 +585,12 @@ int main(int argc, char* argv[])
 	}else if(strcmp(argv[7],"Autoscaling")==0){
 		Autoscaling* autoOptimizer = new Autoscaling(dag);
 		autoOptimizer->Simulate();
+	}else if(strcmp(argv[7],"MOEA")==0){
+		MOEA* spea2 = new MOEA(dag);		
+		spea2->Simulate();
+	}else if(strcmp(argv[7],"moheft")==0){
+		MOHEFT* moheft = new MOHEFT(dag);
+		moheft->Simulate();
 	}
 	return 0;
 }

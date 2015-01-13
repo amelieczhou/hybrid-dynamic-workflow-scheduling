@@ -86,6 +86,7 @@
     <ClInclude Include="InstanceConfig.h" />
     <ClInclude Include="PricingModel.h" />
     <ClInclude Include="ReadTrace.h" />
+    <ClInclude Include="mutation.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
@@ -94,6 +95,9 @@
     <ClCompile Include="DynaNS.cpp" />
     <ClCompile Include="ExpcompareFive_2.cpp" />
     <ClCompile Include="InstanceConfig.cpp" />
+    <ClCompile Include="MOEA.cpp" />
+    <ClCompile Include="MOHEFT.cpp" />
+    <ClCompile Include="mutation.cpp" />
     <ClCompile Include="PricingModel.cpp" />
     <ClCompile Include="ReadTrace.cpp" />
     <ClCompile Include="SearchPrune.cpp" />

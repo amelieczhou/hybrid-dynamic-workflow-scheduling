@@ -57,3 +57,30 @@ class test{
 public:
 	void getCDF(int i);
 };
+
+class MOEA{
+public:
+	DAG* dag;
+
+	void Crossover();
+	void Mutation(std::vector<individual* >&);
+	void evalObjectives(individual*);
+	void calFitnesses(std::vector<individual*>); //evaluate the fitnesses
+	void Evolution();
+	
+	void Simulate();
+	MOEA(){}
+	MOEA(DAG* g){dag=g;}
+
+};
+
+class MOHEFT{
+public:
+	DAG* dag;
+
+	void evalObjectives(individual* indiv, int i);//evaluate till task i
+	std::vector<individual*> BRank();
+	void Simulate();
+	MOHEFT(){}
+	MOHEFT(DAG* g){dag=g;}
+};

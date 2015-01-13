@@ -36,6 +36,9 @@
     <ClInclude Include="Algorithms.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="mutation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -69,6 +72,15 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="SpotOnly.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MOEA.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mutation.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MOHEFT.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

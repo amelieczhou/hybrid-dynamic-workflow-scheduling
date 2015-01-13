@@ -26,6 +26,7 @@ bool myfunction(taskVertex* a, taskVertex* b)
 	return (a->dl < b->dl);
 }
 
+
 bool configsortfunction(configstack* a, configstack* b)
 {
 	return (a->fvalue > b->fvalue); //sort from large to small
@@ -384,4 +385,23 @@ int rn_integers(int a, int b)
 	static uniform_int<> type(a, b);
 	variate_generator< mt19937&, uniform_int<> > gettype(rng, type);
 	return gettype();
+}
+
+//for MOEA
+int cmp_int(const void *p_i1, const void *p_i2)
+/* Compares the two integers '*p_i1' and '*p_i2'.
+   Returns 0 if *p_i1 == *p_i2.
+   Returns 1 if *p_i1 > *p_i2.
+   Returns -1 if *p_i1 < *p_i2. */
+{
+     int i1 = *((int *)p_i1);
+     int i2 = *((int *)p_i2);
+     
+     if(i1 == i2)
+          return (0);
+
+     if(i1 > i2)
+          return (1);
+     else
+          return (-1);
 }

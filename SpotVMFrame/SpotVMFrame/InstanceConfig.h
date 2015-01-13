@@ -1,3 +1,6 @@
+#ifndef INSTANCECONFIG_H
+#define INSTANCECONFIG_H
+
 #include <vector>
 #include <queue>
 #include <boost/graph/adjacency_list.hpp>
@@ -260,13 +263,24 @@ public:
 //	SearchPrune(DAG input){dag = input;}
 };
 
+class individual{//for MOEA; solution, fitness, evaluation of cost and time objectives
+public:
+	int index; //ID
+	int* solution;
+	float fitness;
+	std::pair<float,float> objectives;
+
+	individual(){fitness = 0.0; objectives.first =0.0; objectives.second = 0.0;}
+	~individual() {if(solution) delete[] solution;}	
+};
+
 bool function(float bid_price, float compare_price);
 float rn_01();
 int rn_integers(int a, int b);
 bool myfunction(taskVertex* a, taskVertex* b);
 bool configsortfunction(configstack* a, configstack* b);
-float estimateCost(const DAG& dag, int start, bool estimate); //estimate or calculate the total cost of dag, starting from the start task
-void estimateTime(DAG& dag, float* estTime); //estimate the total execution time of dag, used in offline search
+float estimateCost(const DAG& dag, int start, int end, bool estimate); //estimate or calculate the total cost of dag, starting from the start task to end, inclusive
+void estimateTime(DAG& dag, int start, int end, float* estTime); //estimate the total execution time of dag, used in offline search
 void estimateTimeSpot2(DAG& dag, float* estTime);//used in spot tune
 void conv(float* array1, float* array2, float* result, int length1, int length2);
 void calmaxdistr(float* array1, float* array2, float* result, int length1, int length2);
@@ -282,3 +296,8 @@ bool has_unassigned_parent(taskVertex* tk, DAG* job);
 bool has_unassigned_child(taskVertex* tk, DAG* job);
 void update_EST(taskVertex* tk, DAG* job);
 void update_LFT(taskVertex* tk, DAG* job);
+
+bool dominates(individual*,individual*);
+float calcDistance(individual*,individual*);
+
+#endif
